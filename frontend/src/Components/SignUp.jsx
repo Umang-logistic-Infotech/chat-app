@@ -99,7 +99,7 @@ export default function SignUp() {
       // Redirect to home after 1.5 seconds
       setTimeout(() => {
         navigate("/");
-      }, 1500);
+      }, 1000);
     } catch (err) {
       setError(
         err.response?.data?.message || "Registration failed. Please try again.",

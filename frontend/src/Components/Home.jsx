@@ -53,7 +53,7 @@ export default function Home() {
         ...prev,
         [conversationId]: response.data,
       }));
-      console.log(response.data);
+      console.log("Messages", response.data);
     } catch (error) {
       console.error("Error fetching messages:", error);
     }

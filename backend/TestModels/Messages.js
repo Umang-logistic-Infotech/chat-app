@@ -17,11 +17,6 @@ const Messages = db.define(
       type: DataTypes.TEXT,
       allowNull: false,
     },
-    time: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW,
-    },
     conversation_id: {
       type: DataTypes.INTEGER,
       allowNull: false,

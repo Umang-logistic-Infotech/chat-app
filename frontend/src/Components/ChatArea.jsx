@@ -69,8 +69,8 @@ export default function ChatArea({
     if (!currentMsg) return false;
     if (!previousMsg) return true;
 
-    const currentDate = new Date(currentMsg.time || currentMsg.createdAt);
-    const previousDate = new Date(previousMsg.time || previousMsg.createdAt);
+    const currentDate = new Date(currentMsg.createdAt);
+    const previousDate = new Date(previousMsg.createdAt);
 
     const currentDay = new Date(
       currentDate.getFullYear(),
@@ -210,7 +210,7 @@ export default function ChatArea({
                       boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
                     }}
                   >
-                    {formatDate(msg.time || msg.createdAt)}
+                    {formatDate(msg.createdAt)}
                   </Typography>
                 </Box>
               )}
@@ -248,7 +248,7 @@ export default function ChatArea({
                       lineHeight: 1,
                     }}
                   >
-                    {formatTime(msg.time || msg.createdAt)}
+                    {formatTime(msg.createdAt)}
                   </Typography>
                 </Box>
               </Box>

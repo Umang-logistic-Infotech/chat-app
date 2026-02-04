@@ -55,6 +55,7 @@ router.get("/:conversationId", async (req, res) => {
     const messages = await Messages.findAll({
       where: { conversation_id: conversationId },
       order: [["createdAt", "ASC"]],
+      offset: 5,
     });
 
     res.json(messages);
