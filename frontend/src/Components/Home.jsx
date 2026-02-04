@@ -12,28 +12,103 @@ import ListItem from "@mui/material/ListItem";
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
 import ChatArea from "./ChatArea";
+import useSocket from "../hooks/useSocket";
 
 export default function Home() {
   const [chats, setChats] = useState([]);
   const { user } = useUser();
   const [selectedChat, setSelectedChat] = useState(null);
+  const [messages, setMessages] = useState({}); // { conversationId: [msg, ...] }
 
+  const { sendMessage, incomingMessage } = useSocket(user?.id);
+
+  // ── Fetch users ──
   useEffect(() => {
-    if (user != null) {
-      fetchUsers();
-    }
+    if (user != null) fetchUsers();
   }, [user]);
 
   async function fetchUsers() {
     try {
-      const response = await axios.get(`http://localhost:5000/users`);
-      // Filter out the current logged-in user from the list
+      const response = await axios.get(
+        `http://localhost:5000/users/test/${user.id}`,
+      );
       const filtered = response.data.filter((u) => u.id !== user.id);
       setChats(filtered);
     } catch (error) {
       console.error("Error fetching users:", error);
     }
   }
+
+  // ── Fetch messages for a conversation ──
+  async function fetchMessagesForConversation(conversationId) {
+    if (!conversationId) return; // No conversation exists yet
+
+    try {
+      const response = await axios.get(
+        `http://localhost:5000/users/${conversationId}`,
+      );
+
+      // Store messages by conversationId
+      setMessages((prev) => ({
+        ...prev,
+        [conversationId]: response.data,
+      }));
+      console.log(response.data);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+    }
+  }
+
+  // ── Load messages when a chat is selected ──
+  useEffect(() => {
+    if (selectedChat?.conversationId) {
+      // Only fetch if we don't already have messages for this conversation
+      if (!messages[selectedChat.conversationId]) {
+        fetchMessagesForConversation(selectedChat.conversationId);
+      }
+    }
+  }, [selectedChat]);
+
+  // ── Listen for incoming messages from socket ──
+  useEffect(() => {
+    if (!incomingMessage) return;
+
+    const conversationId = incomingMessage.conversation_id;
+    setMessages((prev) => ({
+      ...prev,
+      [conversationId]: [...(prev[conversationId] || []), incomingMessage],
+    }));
+  }, [incomingMessage]);
+
+  // ── Send a message ──
+  const handleSend = (text) => {
+    if (!text || !selectedChat) return;
+
+    // Optimistically add message to UI
+    const newMessage = {
+      id: Date.now(),
+      sender_id: user.id,
+      message: text,
+      conversation_id: selectedChat.conversationId,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Use conversationId as key (or create temporary key if no conversation exists yet)
+    const messageKey = selectedChat.conversationId || `temp_${selectedChat.id}`;
+
+    setMessages((prev) => ({
+      ...prev,
+      [messageKey]: [...(prev[messageKey] || []), newMessage],
+    }));
+
+    // Send to backend
+    sendMessage(selectedChat.id, text);
+  };
+
+  // Get messages for the selected chat
+  const currentMessages = selectedChat?.conversationId
+    ? messages[selectedChat.conversationId] || []
+    : messages[`temp_${selectedChat?.id}`] || [];
 
   return (
     <Box sx={{ display: "flex", height: "calc(100vh - 64px)" }}>
@@ -49,7 +124,6 @@ export default function Home() {
           bgcolor: "background.paper",
         }}
       >
-        {/* Sidebar Header */}
         <Box
           sx={{
             px: 2,
@@ -63,7 +137,6 @@ export default function Home() {
           </Typography>
         </Box>
 
-        {/* User List */}
         <List
           sx={{
             flex: 1,
@@ -128,7 +201,13 @@ export default function Home() {
       <Divider orientation="vertical" flexItem />
 
       {/* ── Chat Area ── */}
-      <ChatArea selectedChat={selectedChat} currentUser={user} />
+      <ChatArea
+        selectedChat={selectedChat}
+        conversationId={selectedChat?.conversationId || null}
+        currentUser={user}
+        messages={currentMessages}
+        onSend={handleSend}
+      />
     </Box>
   );
 }

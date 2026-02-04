@@ -2,30 +2,64 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import Users from "../Models/Users.js";
 import upload from "../middleware/upload.js";
+import { Op } from "sequelize";
+import Conversations from "../TestModels/Conversations.js";
+import Messages from "../TestModels/Messages.js";
 
 const router = express.Router();
 
 // Get all users
-router.get("/", async (req, res) => {
+router.get("/test/:id", async (req, res) => {
   try {
+    const currentUserId = parseInt(req.params.id);
     const users = await Users.getAllUsers();
-    res.json(users);
+
+    // Get all conversations involving the current user
+    const conversations = await Conversations.findAll({
+      where: {
+        [Op.or]: [{ user1_id: currentUserId }, { user2_id: currentUserId }],
+      },
+    });
+
+    // Map users with their conversation IDs
+    const usersWithConversations = users.map((user) => {
+      // Find conversation between current user and this user
+      const conversation = conversations.find(
+        // ← Changed from Conversations.findAll to conversations.find
+        (conv) =>
+          (conv.user1_id === currentUserId && conv.user2_id === user.id) ||
+          (conv.user2_id === currentUserId && conv.user1_id === user.id),
+      );
+
+      return {
+        ...user.toJSON(),
+        conversationId: conversation ? conversation.id : null,
+      };
+    });
+
+    res.json(usersWithConversations);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // Get user by ID
-router.get("/:id", async (req, res) => {
+router.get("/:conversationId", async (req, res) => {
   try {
-    const user = await Users.getUserById(req.params.id);
+    const conversationId = parseInt(req.params.conversationId);
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    if (isNaN(conversationId)) {
+      return res.status(400).json({ error: "Invalid conversation ID" });
     }
 
-    res.json({ message: "success", data: user });
+    const messages = await Messages.findAll({
+      where: { conversation_id: conversationId },
+      order: [["createdAt", "ASC"]],
+    });
+
+    res.json(messages);
   } catch (err) {
+    console.error("Error fetching messages:", err);
     res.status(500).json({ error: err.message });
   }
 });

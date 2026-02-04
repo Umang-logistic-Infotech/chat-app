@@ -1,24 +1,97 @@
 import { Box, Typography, Avatar, TextField, IconButton } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 
-export default function ChatArea({ selectedChat, currentUser }) {
+export default function ChatArea({
+  selectedChat,
+  currentUser,
+  messages,
+  conversationId,
+  onSend,
+}) {
   const messagesEndRef = useRef(null);
-
-  // Dummy messages for now — will replace with real data later
-  const messages = selectedChat
-    ? [
-        { id: 1, text: "Hello!", sender_user_id: selectedChat.id },
-        { id: 2, text: "Hi 👋", sender_user_id: currentUser?.id },
-        { id: 3, text: "How are you?", sender_user_id: selectedChat.id },
-        { id: 4, text: "I'm good! You?", sender_user_id: currentUser?.id },
-      ]
-    : [];
+  const [inputText, setInputText] = useState("");
 
   // Auto scroll to latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // ── Format timestamp ──
+  const formatTime = (timestamp) => {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? "PM" : "AM";
+    const formattedHours = hours % 12 || 12;
+    const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes;
+    return `${formattedHours}:${formattedMinutes} ${ampm}`;
+  };
+
+  // ── Format date for separator ──
+  const formatDate = (timestamp) => {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    // Reset time parts for comparison
+    const dateOnly = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+    );
+    const todayOnly = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+    );
+    const yesterdayOnly = new Date(
+      yesterday.getFullYear(),
+      yesterday.getMonth(),
+      yesterday.getDate(),
+    );
+
+    if (dateOnly.getTime() === todayOnly.getTime()) {
+      return "Today";
+    } else if (dateOnly.getTime() === yesterdayOnly.getTime()) {
+      return "Yesterday";
+    } else {
+      const options = { month: "short", day: "numeric", year: "numeric" };
+      return date.toLocaleDateString("en-US", options);
+    }
+  };
+
+  // ── Check if we need a date separator ──
+  const shouldShowDateSeparator = (currentMsg, previousMsg) => {
+    if (!currentMsg) return false;
+    if (!previousMsg) return true;
+
+    const currentDate = new Date(currentMsg.time || currentMsg.createdAt);
+    const previousDate = new Date(previousMsg.time || previousMsg.createdAt);
+
+    const currentDay = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth(),
+      currentDate.getDate(),
+    );
+    const previousDay = new Date(
+      previousDate.getFullYear(),
+      previousDate.getMonth(),
+      previousDate.getDate(),
+    );
+
+    return currentDay.getTime() !== previousDay.getTime();
+  };
+
+  // ── Send handler ──
+  const handleSend = () => {
+    if (!inputText.trim()) return;
+    onSend(inputText.trim());
+    setInputText("");
+  };
 
   // ── No chat selected ──
   if (!selectedChat) {
@@ -82,18 +155,14 @@ export default function ChatArea({ selectedChat, currentUser }) {
         >
           {!selectedChat.profile_photo && selectedChat.name?.charAt(0)}
         </Avatar>
-
         <Box>
           <Typography fontWeight={600} fontSize={15}>
             {selectedChat.name}
           </Typography>
-          <Typography fontSize={12} color="text.secondary">
-            Online
-          </Typography>
         </Box>
       </Box>
 
-      {/* Messages Area */}
+      {/* Messages */}
       <Box
         sx={{
           flex: 1,
@@ -110,41 +179,87 @@ export default function ChatArea({ selectedChat, currentUser }) {
           },
         }}
       >
-        {messages.map((msg) => {
-          const isMine = String(msg.sender_user_id) === String(currentUser?.id);
+        {messages.map((msg, index) => {
+          const isMine =
+            String(msg.sender_id || msg.sender_user_id) ===
+            String(currentUser?.id);
+          const showDateSeparator = shouldShowDateSeparator(
+            msg,
+            messages[index - 1],
+          );
+
           return (
-            <Box
-              key={msg.id}
-              sx={{
-                display: "flex",
-                justifyContent: isMine ? "flex-end" : "flex-start",
-              }}
-            >
+            <Box key={msg.id}>
+              {/* Date Separator */}
+              {showDateSeparator && (
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "center",
+                    my: 2,
+                  }}
+                >
+                  <Typography
+                    sx={{
+                      fontSize: 12,
+                      color: "text.secondary",
+                      bgcolor: "#fff",
+                      px: 2,
+                      py: 0.5,
+                      borderRadius: "8px",
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                    }}
+                  >
+                    {formatDate(msg.time || msg.createdAt)}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Message Bubble */}
               <Box
                 sx={{
-                  px: 2,
-                  py: 1,
-                  borderRadius: isMine
-                    ? "16px 16px 4px 16px"
-                    : "16px 16px 16px 4px",
-                  maxWidth: "60%",
-                  bgcolor: isMine ? "#d9fdd3" : "#fff",
-                  boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                  display: "flex",
+                  justifyContent: isMine ? "flex-end" : "flex-start",
                 }}
               >
-                <Typography variant="body2" sx={{ wordBreak: "break-word" }}>
-                  {msg.text}
-                </Typography>
+                <Box
+                  sx={{
+                    px: 2,
+                    py: 1,
+                    borderRadius: isMine
+                      ? "16px 16px 4px 16px"
+                      : "16px 16px 16px 4px",
+                    maxWidth: "60%",
+                    bgcolor: isMine ? "#d9fdd3" : "#fff",
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                  }}
+                >
+                  <Typography variant="body2" sx={{ wordBreak: "break-word" }}>
+                    {msg.message || msg.message_text}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontSize: 9,
+                      color: "rgba(0,0,0,0.45)",
+                      display: "block",
+                      mt: 0.25,
+                      textAlign: isMine ? "right" : "left",
+                      lineHeight: 1,
+                    }}
+                  >
+                    {formatTime(msg.time || msg.createdAt)}
+                  </Typography>
+                </Box>
               </Box>
             </Box>
           );
         })}
 
-        {/* Scroll anchor */}
         <div ref={messagesEndRef} />
       </Box>
 
-      {/* Input Area */}
+      {/* Input */}
       <Box
         sx={{
           px: 2,
@@ -162,6 +277,9 @@ export default function ChatArea({ selectedChat, currentUser }) {
           size="small"
           placeholder="Type a message..."
           variant="outlined"
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSend()}
           sx={{
             "& .MuiOutlinedInput-root": {
               borderRadius: "20px",
@@ -171,11 +289,13 @@ export default function ChatArea({ selectedChat, currentUser }) {
           }}
         />
         <IconButton
-          color="primary"
+          onClick={handleSend}
+          disabled={!inputText.trim()}
           sx={{
             bgcolor: "#0084ff",
             color: "#fff",
             "&:hover": { bgcolor: "#0073e6" },
+            "&.Mui-disabled": { bgcolor: "#ccc", color: "#fff" },
           }}
         >
           <SendIcon sx={{ fontSize: 18 }} />
