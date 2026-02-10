@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+import verifyJWTToken from "./middleware/verifyJwt.js";
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -93,6 +94,16 @@ app.use(
     credentials: true,
   }),
 );
+
+app.use((req, res, next) => {
+  const publicRoutes = ["users/login", "users/register"];
+
+  if (publicRoutes.some((r) => req.path.includes(r))) {
+    return next();
+  }
+
+  verifyJWTToken(req, res, next);
+});
 app.use(express.json());
 app.use(cookieParser());
 
