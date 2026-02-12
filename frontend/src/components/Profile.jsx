@@ -16,11 +16,11 @@ import PhotoCamera from "@mui/icons-material/PhotoCamera";
 import EditIcon from "@mui/icons-material/Edit";
 import SaveIcon from "@mui/icons-material/Save";
 import CancelIcon from "@mui/icons-material/Cancel";
-import axios from "axios";
 import { useUser } from "../context/UserContext";
 import { useNavigate } from "react-router-dom";
+import { api } from "../Interceptor/auth";
 
-axios.defaults.withCredentials = true;
+api.defaults.withCredentials = true;
 
 export default function Profile() {
   const { user, login } = useUser();
@@ -91,8 +91,8 @@ export default function Profile() {
         formDataToSend.append("profile_photo", profileImage);
       }
 
-      const response = await axios.put(
-        `http://localhost:5000/users/${user.id}`,
+      const response = await api.put(
+        `${process.env.REACT_APP_API_URL}/users/${user.id}`,
         formDataToSend,
         {
           headers: {

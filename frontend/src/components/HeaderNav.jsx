@@ -10,9 +10,9 @@ import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
-import axios from "axios";
+import { api } from "../Interceptor/auth";
 
-axios.defaults.withCredentials = true;
+api.defaults.withCredentials = true;
 
 export default function HeaderNav() {
   const { user, logout: logoutContext } = useUser();
@@ -29,7 +29,7 @@ export default function HeaderNav() {
 
   const handleLogout = async () => {
     try {
-      await axios.post("http://localhost:5000/users/logout");
+      await api.post(`${process.env.REACT_APP_API_URL}/users/logout`);
       logoutContext();
       navigate("/login");
     } catch (error) {

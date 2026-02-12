@@ -12,6 +12,11 @@ const Messages = db.define(
     sender_id: {
       type: DataTypes.INTEGER,
       allowNull: false,
+      references: {
+        model: "users",
+        key: "id",
+      },
+      onDelete: "CASCADE",
     },
     message: {
       type: DataTypes.TEXT,
@@ -20,6 +25,11 @@ const Messages = db.define(
     conversation_id: {
       type: DataTypes.INTEGER,
       allowNull: false,
+      references: {
+        model: "conversations",
+        key: "id",
+      },
+      onDelete: "CASCADE",
     },
     status: {
       type: DataTypes.ENUM("sending", "sent", "delivered", "read"),

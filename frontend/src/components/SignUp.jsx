@@ -13,11 +13,11 @@ import {
 import PersonAddOutlinedIcon from "@mui/icons-material/PersonAddOutlined";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
+import { api } from "../Interceptor/auth";
 
-axios.defaults.withCredentials = true;
+api.defaults.withCredentials = true;
 
 export default function SignUp() {
   const [formData, setFormData] = useState({
@@ -82,8 +82,8 @@ export default function SignUp() {
     setSuccess("");
 
     try {
-      const response = await axios.post(
-        "http://localhost:5000/users/register",
+      const response = await api.post(
+        `${process.env.REACT_APP_API_URL}/users/register`,
         {
           name: formData.name,
           phone_number: formData.phone_number,

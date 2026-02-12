@@ -1,47 +1,132 @@
 import express from "express";
 import jwt from "jsonwebtoken";
-import Users from "../Models/Users.js";
+// import Users from "../Models/Users.js";
 import upload from "../middleware/upload.js";
 import { Op } from "sequelize";
-import Conversations from "../Models/Conversations.js";
-import Messages from "../Models/Messages.js";
+import {
+  Users,
+  Conversations,
+  ConversationParticipants,
+  Messages,
+} from "../Models/index.js";
 
 const router = express.Router();
 
-// Get all users
-router.get("/test/:id", async (req, res) => {
+router.get("/list/:currentUserId", async (req, res) => {
   try {
-    const currentUserId = parseInt(req.params.id);
-    const users = await Users.getAllUsers();
+    const currentUserId = parseInt(req.params.currentUserId);
 
-    // Get all conversations involving the current user
-    const conversations = await Conversations.findAll({
+    if (isNaN(currentUserId)) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    const users = await Users.findAll({
       where: {
-        [Op.or]: [{ user1_id: currentUserId }, { user2_id: currentUserId }],
+        id: { [Op.ne]: currentUserId },
       },
+      attributes: ["id", "name", "phone_number", "profile_photo"],
+      order: [["name", "ASC"]],
     });
 
-    // Map users with their conversation IDs
-    const usersWithConversations = users.map((user) => {
-      const conversation = conversations.find(
-        (conv) =>
-          (conv.user1_id === currentUserId && conv.user2_id === user.id) ||
-          (conv.user2_id === currentUserId && conv.user1_id === user.id),
-      );
-
-      return {
-        ...user.toJSON(),
-        conversationId: conversation ? conversation.id : null,
-      };
-    });
-
-    res.json(usersWithConversations);
+    res.json(users);
   } catch (err) {
+    console.error("Error fetching users:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Get user by ID
+// 2. Find user by phone number
+router.get("/find-by-phone/:phoneNumber", async (req, res) => {
+  try {
+    const phoneNumber = req.params.phoneNumber;
+
+    if (!phoneNumber) {
+      return res.status(400).json({ error: "Phone number is required" });
+    }
+
+    const user = await Users.findOne({
+      where: { phone_number: phoneNumber },
+      attributes: ["id", "name", "phone_number", "profile_photo"],
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json(user);
+  } catch (err) {
+    console.error("Error finding user by phone:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all users with their conversation IDs
+router.get("/test/:id", async (req, res) => {
+  try {
+    const currentUserId = parseInt(req.params.id);
+
+    if (isNaN(currentUserId)) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    // Get all users except current user
+    const users = await Users.findAll({
+      where: {
+        id: { [Op.ne]: currentUserId },
+      },
+      attributes: ["id", "name", "phone_number", "profile_photo"],
+    });
+
+    // Get all private conversations where current user is a participant
+    const userParticipations = await ConversationParticipants.findAll({
+      where: { user_id: currentUserId },
+      include: [
+        {
+          model: Conversations,
+          as: "conversation",
+          where: { type: "private" },
+          include: [
+            {
+              model: ConversationParticipants,
+              as: "participantsList",
+              where: { user_id: { [Op.ne]: currentUserId } },
+              include: [
+                {
+                  model: Users,
+                  as: "user",
+                  attributes: ["id"],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    // Create a map of userId -> conversationId for quick lookup
+    const conversationMap = {};
+    userParticipations.forEach((participation) => {
+      const otherParticipant = participation.conversation.participantsList[0];
+      if (otherParticipant) {
+        conversationMap[otherParticipant.user_id] =
+          participation.conversation_id;
+      }
+    });
+
+    // Map users with their conversation IDs
+    const usersWithConversations = users.map((user) => ({
+      ...user.toJSON(),
+      conversationId: conversationMap[user.id] || null,
+    }));
+
+    res.json(usersWithConversations);
+  } catch (err) {
+    console.error("Error fetching users:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get messages by conversation ID
 router.get("/:conversationId", async (req, res) => {
   try {
     const conversationId = parseInt(req.params.conversationId);
@@ -50,15 +135,319 @@ router.get("/:conversationId", async (req, res) => {
       return res.status(400).json({ error: "Invalid conversation ID" });
     }
 
+    // Verify conversation exists
+    const conversation = await Conversations.findByPk(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ error: "Conversation not found" });
+    }
+
+    // Get all messages for this conversation
     const messages = await Messages.findAll({
       where: { conversation_id: conversationId },
       order: [["createdAt", "ASC"]],
-      // offset: 5,
+      include: [
+        {
+          model: Users,
+          as: "sender",
+          attributes: ["id", "name", "profile_photo"],
+        },
+      ],
     });
 
     res.json(messages);
   } catch (err) {
     console.error("Error fetching messages:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all conversations for a user (both private and group)
+router.get("/conversations/:userId", async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId);
+
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    const conversations = await Conversations.findAll({
+      include: [
+        {
+          model: ConversationParticipants,
+          as: "participantsList",
+          where: { user_id: userId },
+          attributes: ["role", "joined_at"],
+        },
+        {
+          model: Users,
+          as: "participants",
+          attributes: ["id", "name", "profile_photo", "phone_number"],
+          through: { attributes: [] },
+        },
+        {
+          model: Messages,
+          as: "messages",
+          limit: 1,
+          order: [["createdAt", "DESC"]],
+          required: false,
+          include: [
+            {
+              model: Users,
+              as: "sender",
+              attributes: ["id", "name"],
+            },
+          ],
+        },
+        {
+          model: Users,
+          as: "creator",
+          attributes: ["id", "name"],
+          required: false,
+        },
+      ],
+      order: [["updatedAt", "DESC"]],
+    });
+    if (!conversations) {
+      return res.status(404).message("No Conversations Found");
+    }
+
+    // Format response
+    const formattedConversations = conversations.map((conv) => {
+      const convData = conv.toJSON();
+
+      // For private chats, get the other participant
+      if (conv.type === "private") {
+        const otherParticipant = convData.participants.find(
+          (p) => p.id !== userId,
+        );
+        return {
+          id: conv.id,
+          type: "private",
+          conversationId: conv.id,
+          name: otherParticipant?.name,
+          profile_photo: otherParticipant?.profile_photo,
+          phone_number: otherParticipant?.phone_number,
+          lastMessage: convData.messages[0] || null,
+          participantCount: convData.participants.length,
+          myRole: convData.participantsList[0]?.role,
+        };
+      } else {
+        // Group chat
+        return {
+          id: conv.id,
+          type: "group",
+          conversationId: conv.id,
+          name: conv.name,
+          group_photo: conv.group_photo,
+          description: conv.description,
+          lastMessage: convData.messages[0] || null,
+          participantCount: convData.participants.length,
+          myRole: convData.participantsList[0]?.role,
+          createdBy: convData.creator,
+        };
+      }
+    });
+
+    res.json(formattedConversations);
+  } catch (err) {
+    console.error("Error fetching conversations:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get conversation details by ID
+router.get("/conversation/:conversationId", async (req, res) => {
+  try {
+    const conversationId = parseInt(req.params.conversationId);
+
+    if (isNaN(conversationId)) {
+      return res.status(400).json({ error: "Invalid conversation ID" });
+    }
+
+    const conversation = await Conversations.findByPk(conversationId, {
+      include: [
+        {
+          model: Users,
+          as: "participants",
+          attributes: ["id", "name", "profile_photo", "phone_number"],
+          through: {
+            attributes: ["role", "joined_at"],
+            as: "participantInfo",
+          },
+        },
+        {
+          model: Users,
+          as: "creator",
+          attributes: ["id", "name"],
+          required: false,
+        },
+      ],
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ error: "Conversation not found" });
+    }
+
+    res.json(conversation);
+  } catch (err) {
+    console.error("Error fetching conversation details:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a new group conversation
+router.post("/create-group", async (req, res) => {
+  try {
+    const { name, description, group_photo, created_by, participant_ids } =
+      req.body;
+
+    // Validation
+    if (
+      !name ||
+      !created_by ||
+      !participant_ids ||
+      participant_ids.length < 2
+    ) {
+      return res.status(400).json({
+        error: "Group name, creator, and at least 2 participants are required",
+      });
+    }
+
+    // Create the group conversation
+    const conversation = await Conversations.create({
+      type: "group",
+      name,
+      description,
+      group_photo,
+      created_by,
+    });
+
+    // Add all participants (including creator as admin)
+    const participantsData = participant_ids.map((userId) => ({
+      conversation_id: conversation.id,
+      user_id: userId,
+      role: userId === created_by ? "admin" : "member",
+    }));
+
+    await ConversationParticipants.bulkCreate(participantsData);
+
+    // Fetch the complete conversation with participants
+    const completeConversation = await Conversations.findByPk(conversation.id, {
+      include: [
+        {
+          model: Users,
+          as: "participants",
+          attributes: ["id", "name", "profile_photo"],
+          through: { attributes: ["role"] },
+        },
+      ],
+    });
+
+    res.status(201).json(completeConversation);
+  } catch (err) {
+    console.error("Error creating group:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add participant to group
+router.post("/add-participant", async (req, res) => {
+  try {
+    const { conversation_id, user_id, added_by } = req.body;
+
+    if (!conversation_id || !user_id || !added_by) {
+      return res.status(400).json({
+        error: "conversation_id, user_id, and added_by are required",
+      });
+    }
+
+    // Verify conversation exists and is a group
+    const conversation = await Conversations.findByPk(conversation_id);
+    if (!conversation) {
+      return res.status(404).json({ error: "Conversation not found" });
+    }
+    if (conversation.type !== "group") {
+      return res
+        .status(400)
+        .json({ error: "Can only add participants to group chats" });
+    }
+
+    // Verify the person adding is an admin
+    const adderParticipant = await ConversationParticipants.findOne({
+      where: { conversation_id, user_id: added_by },
+    });
+
+    if (!adderParticipant || adderParticipant.role !== "admin") {
+      return res
+        .status(403)
+        .json({ error: "Only admins can add participants" });
+    }
+
+    // Check if user is already a participant
+    const existingParticipant = await ConversationParticipants.findOne({
+      where: { conversation_id, user_id },
+    });
+
+    if (existingParticipant) {
+      return res.status(400).json({ error: "User is already a participant" });
+    }
+
+    // Add the participant
+    const newParticipant = await ConversationParticipants.create({
+      conversation_id,
+      user_id,
+      role: "member",
+    });
+
+    // Get user details
+    const user = await Users.findByPk(user_id, {
+      attributes: ["id", "name", "profile_photo"],
+    });
+
+    res.status(201).json({
+      ...newParticipant.toJSON(),
+      user,
+    });
+  } catch (err) {
+    console.error("Error adding participant:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Remove participant from group
+router.delete("/remove-participant", async (req, res) => {
+  try {
+    const { conversation_id, user_id, removed_by } = req.body;
+
+    if (!conversation_id || !user_id || !removed_by) {
+      return res.status(400).json({
+        error: "conversation_id, user_id, and removed_by are required",
+      });
+    }
+
+    // Verify the person removing is an admin
+    const removerParticipant = await ConversationParticipants.findOne({
+      where: { conversation_id, user_id: removed_by },
+    });
+
+    if (!removerParticipant || removerParticipant.role !== "admin") {
+      return res
+        .status(403)
+        .json({ error: "Only admins can remove participants" });
+    }
+
+    // Remove the participant
+    const deleted = await ConversationParticipants.destroy({
+      where: { conversation_id, user_id },
+    });
+
+    if (deleted === 0) {
+      return res.status(404).json({ error: "Participant not found" });
+    }
+
+    res.json({ message: "Participant removed successfully" });
+  } catch (err) {
+    console.error("Error removing participant:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -243,7 +632,7 @@ router.put("/:id", upload.single("profile_photo"), async (req, res) => {
     // Store the image URL if file was uploaded
     if (req.file) {
       // Store the URL that the frontend can use to access the image
-      updateData.profile_photo = `http://localhost:5000/uploads/${req.file.filename}`;
+      updateData.profile_photo = `process.env.REACT_APP_API_URL/uploads/${req.file.filename}`;
     }
 
     const updatedUser = await Users.updateUser(req.params.id, updateData);

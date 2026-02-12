@@ -13,11 +13,11 @@ import {
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
+import { api } from "../Interceptor/auth";
 
-axios.defaults.withCredentials = true;
+api.defaults.withCredentials = true;
 
 export default function Login() {
   const [formData, setFormData] = useState({
@@ -56,14 +56,17 @@ export default function Login() {
     setError("");
 
     try {
-      const response = await axios.post("http://localhost:5000/users/login", {
-        phone_number: formData.phone_number,
-        password: formData.password,
-      });
-
+      const response = await api.post(
+        `${process.env.REACT_APP_API_URL}/users/login`,
+        {
+          phone_number: formData.phone_number,
+          password: formData.password,
+        },
+      );
       // Update user context
       login(response.data.user);
 
+      localStorage.setItem("token", response.data.token);
       // Navigate to home
       navigate("/");
     } catch (err) {
