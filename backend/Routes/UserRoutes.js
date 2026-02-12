@@ -3,8 +3,8 @@ import jwt from "jsonwebtoken";
 import Users from "../Models/Users.js";
 import upload from "../middleware/upload.js";
 import { Op } from "sequelize";
-import Conversations from "../TestModels/Conversations.js";
-import Messages from "../TestModels/Messages.js";
+import Conversations from "../Models/Conversations.js";
+import Messages from "../Models/Messages.js";
 
 const router = express.Router();
 
@@ -23,9 +23,7 @@ router.get("/test/:id", async (req, res) => {
 
     // Map users with their conversation IDs
     const usersWithConversations = users.map((user) => {
-      // Find conversation between current user and this user
       const conversation = conversations.find(
-        // ← Changed from Conversations.findAll to conversations.find
         (conv) =>
           (conv.user1_id === currentUserId && conv.user2_id === user.id) ||
           (conv.user2_id === currentUserId && conv.user1_id === user.id),
@@ -55,7 +53,7 @@ router.get("/:conversationId", async (req, res) => {
     const messages = await Messages.findAll({
       where: { conversation_id: conversationId },
       order: [["createdAt", "ASC"]],
-      offset: 5,
+      // offset: 5,
     });
 
     res.json(messages);

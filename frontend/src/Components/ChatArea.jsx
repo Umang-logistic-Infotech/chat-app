@@ -1,5 +1,21 @@
-import { Box, Typography, Avatar, TextField, IconButton } from "@mui/material";
+import {
+  Box,
+  Typography,
+  Avatar,
+  TextField,
+  IconButton,
+  Paper,
+  Chip,
+  InputAdornment,
+} from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
+import EmojiEmotionsIcon from "@mui/icons-material/EmojiEmotions";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import DoneIcon from "@mui/icons-material/Done";
+import DoneAllIcon from "@mui/icons-material/DoneAll";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import { useRef, useEffect, useState } from "react";
 
 export default function ChatArea({
@@ -37,7 +53,6 @@ export default function ChatArea({
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
 
-    // Reset time parts for comparison
     const dateOnly = new Date(
       date.getFullYear(),
       date.getMonth(),
@@ -86,6 +101,31 @@ export default function ChatArea({
     return currentDay.getTime() !== previousDay.getTime();
   };
 
+  // ── Get message status icon ──
+  const getMessageStatusIcon = (msg) => {
+    // Only show status for sent messages (mine)
+    const isMine =
+      String(msg.sender_id || msg.sender_user_id) === String(currentUser?.id);
+    if (!isMine) return null;
+
+    const status = msg.status || "sent"; // Default to 'sent' if no status
+
+    switch (status) {
+      case "sending":
+        return <AccessTimeIcon sx={{ fontSize: 14, color: "#F4A261" }} />;
+      case "sent":
+        return <DoneIcon sx={{ fontSize: 14, color: "#2A9D8F" }} />;
+      case "delivered":
+        return <DoneAllIcon sx={{ fontSize: 14, color: "#3A86FF" }} />;
+      case "read":
+        return <DoneAllIcon sx={{ fontSize: 14, color: "#C77DFF" }} />;
+      case "failed":
+        return <ErrorOutlineIcon sx={{ fontSize: 14, color: "#E63946" }} />;
+      default:
+        return <DoneIcon sx={{ fontSize: 14, color: "#EF4444" }} />;
+    }
+  };
+
   // ── Send handler ──
   const handleSend = () => {
     if (!inputText.trim()) return;
@@ -103,28 +143,29 @@ export default function ChatArea({
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          bgcolor: "#f0f2f5",
+          bgcolor: "#f8f9fa",
           gap: 2,
         }}
       >
         <Box
           sx={{
-            width: 80,
-            height: 80,
+            width: 120,
+            height: 120,
             borderRadius: "50%",
-            bgcolor: "#e0e0e0",
+            bgcolor: "primary.main",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: 36,
+            color: "white",
+            fontSize: 60,
           }}
         >
           💬
         </Box>
-        <Typography variant="h6" fontWeight={600} color="text.primary">
+        <Typography variant="h5" fontWeight={600} color="text.primary">
           Welcome to Chat
         </Typography>
-        <Typography color="text.secondary" fontSize={14}>
+        <Typography variant="body1" color="text.secondary">
           Select a user to start messaging
         </Typography>
       </Box>
@@ -134,16 +175,22 @@ export default function ChatArea({
   // ── Chat selected ──
   return (
     <Box
-      sx={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}
+      sx={{
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        bgcolor: "#f0f2f5",
+      }}
     >
-      {/* Header */}
-      <Box
+      {/* ── Header ── */}
+      <Paper
+        elevation={1}
         sx={{
-          px: 2,
-          py: 1.5,
           display: "flex",
           alignItems: "center",
-          gap: 1.5,
+          gap: 2,
+          p: 2,
+          borderRadius: 0,
           borderBottom: "1px solid",
           borderColor: "divider",
           bgcolor: "background.paper",
@@ -151,32 +198,39 @@ export default function ChatArea({
       >
         <Avatar
           src={selectedChat.profile_photo || ""}
-          sx={{ width: 40, height: 40 }}
+          sx={{ width: 48, height: 48 }}
         >
           {!selectedChat.profile_photo && selectedChat.name?.charAt(0)}
         </Avatar>
-        <Box>
-          <Typography fontWeight={600} fontSize={15}>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="h6" fontWeight={600}>
             {selectedChat.name}
           </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {selectedChat.phone_number}
+          </Typography>
         </Box>
-      </Box>
+        <IconButton>
+          <MoreVertIcon />
+        </IconButton>
+      </Paper>
 
-      {/* Messages */}
+      {/* ── Messages Area ── */}
       <Box
         sx={{
           flex: 1,
           overflowY: "auto",
-          p: 2,
-          bgcolor: "#efeae2",
+          p: 3,
           display: "flex",
           flexDirection: "column",
           gap: 1,
-          "&::-webkit-scrollbar": { width: "6px" },
+          "&::-webkit-scrollbar": { width: "8px" },
           "&::-webkit-scrollbar-thumb": {
-            bgcolor: "#ccc",
-            borderRadius: "3px",
+            bgcolor: "#bbb",
+            borderRadius: "4px",
           },
+          backgroundImage:
+            'linear-gradient(rgba(255,255,255,0.5), rgba(255,255,255,0.5)), url(\'data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%23e0e0e0" fill-opacity="0.4"%3E%3Cpath d="M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\')',
         }}
       >
         {messages.map((msg, index) => {
@@ -189,7 +243,7 @@ export default function ChatArea({
           );
 
           return (
-            <Box key={msg.id}>
+            <Box key={msg.id || index}>
               {/* Date Separator */}
               {showDateSeparator && (
                 <Box
@@ -199,19 +253,16 @@ export default function ChatArea({
                     my: 2,
                   }}
                 >
-                  <Typography
+                  <Chip
+                    label={formatDate(msg.createdAt)}
+                    size="small"
                     sx={{
-                      fontSize: 12,
+                      bgcolor: "rgba(0,0,0,0.05)",
                       color: "text.secondary",
-                      bgcolor: "#fff",
-                      px: 2,
-                      py: 0.5,
-                      borderRadius: "8px",
-                      boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                      fontWeight: 500,
+                      fontSize: "0.75rem",
                     }}
-                  >
-                    {formatDate(msg.createdAt)}
-                  </Typography>
+                  />
                 </Box>
               )}
 
@@ -220,87 +271,135 @@ export default function ChatArea({
                 sx={{
                   display: "flex",
                   justifyContent: isMine ? "flex-end" : "flex-start",
+                  mb: 0.5,
                 }}
               >
                 <Box
                   sx={{
-                    px: 2,
-                    py: 1,
-                    borderRadius: isMine
-                      ? "16px 16px 4px 16px"
-                      : "16px 16px 16px 4px",
-                    maxWidth: "60%",
-                    bgcolor: isMine ? "#d9fdd3" : "#fff",
-                    boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                    maxWidth: "65%",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: isMine ? "flex-end" : "flex-start",
                   }}
                 >
-                  <Typography variant="body2" sx={{ wordBreak: "break-word" }}>
-                    {msg.message || msg.message_text}
-                  </Typography>
-                  <Typography
-                    variant="caption"
+                  <Paper
+                    elevation={1}
                     sx={{
-                      fontSize: 9,
-                      color: "rgba(0,0,0,0.45)",
-                      display: "block",
-                      mt: 0.25,
-                      textAlign: isMine ? "right" : "left",
-                      lineHeight: 1,
+                      px: 1.5,
+                      py: 0.5,
+                      borderRadius: isMine
+                        ? "16px 16px 4px 16px"
+                        : "16px 16px 16px 4px",
+                      bgcolor: isMine ? "primary.main" : "background.paper",
+                      color: isMine ? "white" : "text.primary",
+                      wordBreak: "break-word",
                     }}
                   >
-                    {formatTime(msg.createdAt)}
-                  </Typography>
+                    <Typography variant="body1" sx={{ lineHeight: 1.5 }}>
+                      {msg.message || msg.message_text}
+                    </Typography>
+                  </Paper>
+
+                  {/* Time and Status */}
+                  <Box
+                    sx={{
+                      mt: 0.5,
+                      px: 1,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 0.5,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                        fontSize: "0.7rem",
+                      }}
+                    >
+                      {formatTime(msg.createdAt)}
+                    </Typography>
+                    {isMine && getMessageStatusIcon(msg)}
+                  </Box>
                 </Box>
               </Box>
             </Box>
           );
         })}
-
         <div ref={messagesEndRef} />
       </Box>
 
-      {/* Input */}
-      <Box
+      {/* ── Input Area ── */}
+      <Paper
+        elevation={3}
         sx={{
-          px: 2,
-          py: 1.5,
+          p: 2,
+          borderRadius: 0,
           display: "flex",
-          alignItems: "center",
           gap: 1,
-          borderTop: "1px solid",
-          borderColor: "divider",
+          alignItems: "center",
           bgcolor: "background.paper",
         }}
       >
+        <IconButton color="primary" size="medium">
+          <EmojiEmotionsIcon />
+        </IconButton>
+        <IconButton color="primary" size="medium">
+          <AttachFileIcon />
+        </IconButton>
         <TextField
           fullWidth
-          size="small"
+          multiline
+          maxRows={4}
           placeholder="Type a message..."
-          variant="outlined"
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
           sx={{
             "& .MuiOutlinedInput-root": {
-              borderRadius: "20px",
+              borderRadius: "24px",
               bgcolor: "#f0f2f5",
-              "& fieldset": { border: "none" },
+              "& fieldset": {
+                border: "none",
+              },
+              "&:hover fieldset": {
+                border: "none",
+              },
+              "&.Mui-focused fieldset": {
+                border: "2px solid",
+                borderColor: "primary.main",
+              },
             },
           }}
         />
         <IconButton
+          color="primary"
           onClick={handleSend}
           disabled={!inputText.trim()}
           sx={{
-            bgcolor: "#0084ff",
-            color: "#fff",
-            "&:hover": { bgcolor: "#0073e6" },
-            "&.Mui-disabled": { bgcolor: "#ccc", color: "#fff" },
+            bgcolor: inputText.trim()
+              ? "primary.main"
+              : "action.disabledBackground",
+            color: "white",
+            "&:hover": {
+              bgcolor: inputText.trim()
+                ? "primary.dark"
+                : "action.disabledBackground",
+            },
+            "&.Mui-disabled": {
+              bgcolor: "action.disabledBackground",
+              color: "action.disabled",
+            },
           }}
         >
-          <SendIcon sx={{ fontSize: 18 }} />
+          <SendIcon />
         </IconButton>
-      </Box>
+      </Paper>
     </Box>
   );
 }

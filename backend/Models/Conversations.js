@@ -1,6 +1,5 @@
-import { DataTypes } from "sequelize";
 import db from "../config/db.js";
-// import Conversations_Members from "./Conversation_Members.js";
+import { DataTypes } from "sequelize";
 
 const Conversations = db.define(
   "conversations",
@@ -10,35 +9,28 @@ const Conversations = db.define(
       primaryKey: true,
       autoIncrement: true,
     },
-    name: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      unique: false,
-    },
     type: {
-      type: DataTypes.ENUM("private", "group"),
+      type: DataTypes.ENUM("private", "group"), // e.g. "private", "group"
       allowNull: false,
-      unique: false,
+    },
+    user1_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    user2_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
     },
   },
   {
     timestamps: true,
+    indexes: [
+      {
+        unique: true,
+        fields: ["type", "user1_id", "user2_id"],
+      },
+    ],
   },
 );
-
-// Conversations.getAllMembers = async (id) => {
-//   try {
-//     return await Conversations.findAll({
-//       include: [
-//         {
-//           model: Conversations_Members,
-//           where: { user_id: id },
-//         },
-//       ],
-//     });
-//   } catch (error) {
-//     throw error;
-//   }
-// };
 
 export default Conversations;

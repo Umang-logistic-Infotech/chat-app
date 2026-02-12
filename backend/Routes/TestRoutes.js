@@ -1,5 +1,5 @@
-import Conversations from "../TestModels/Conversations.js";
-import Messages from "../TestModels/Messages.js";
+import Conversations from "../Models/Conversations.js";
+import Messages from "../Models/Messages.js";
 import Users from "../Models/Users.js";
 import express from "express";
 
