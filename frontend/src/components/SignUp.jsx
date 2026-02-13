@@ -95,6 +95,7 @@ export default function SignUp() {
 
       // Update user context
       login(response.data.user);
+      localStorage.setItem("token", response.data.token);
 
       // Redirect to home after 1.5 seconds
       setTimeout(() => {

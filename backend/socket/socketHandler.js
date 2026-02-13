@@ -3,7 +3,9 @@ import {
   Messages,
   ConversationParticipants,
   ActiveUsers,
+  Users,
 } from "../Models/index.js";
+import { Op } from "sequelize";
 
 export default function setupSocketHandlers(io) {
   io.on("connection", (socket) => {
@@ -30,195 +32,130 @@ export default function setupSocketHandlers(io) {
       }
     });
 
-    // ─── SEND MESSAGE (PRIVATE OR GROUP) ────────────────────────────
+    // ─── SEND MESSAGE TO CONVERSATION ────────────────────────────────
     socket.on(
       "send_message",
-      async ({
-        senderUserId,
-        conversationId,
-        receiverUserId,
-        message,
-        conversationType,
-      }) => {
+      async ({ senderUserId, conversationId, message }) => {
+        console.log(
+          "📨 Sending message from",
+          senderUserId,
+          "to conversation",
+          conversationId,
+        );
+
         try {
-          let conversation;
-
-          // ─── PRIVATE CHAT ─────────────────────────────────────────
-          if (conversationType === "private" || receiverUserId) {
-            const user1 = Math.min(senderUserId, receiverUserId);
-            const user2 = Math.max(senderUserId, receiverUserId);
-
-            // Find existing private conversation between these two users
-            const existingConversations =
-              await ConversationParticipants.findAll({
-                where: { user_id: [user1, user2] },
-                attributes: ["conversation_id"],
-                include: [
-                  {
-                    model: Conversations,
-                    as: "conversation",
-                    where: { type: "private" },
-                  },
-                ],
-              });
-
-            // Group by conversation_id and find one with exactly 2 participants
-            const conversationIds = existingConversations.map(
-              (p) => p.conversation_id,
-            );
-            const uniqueConvIds = [...new Set(conversationIds)];
-
-            let foundConversation = null;
-            for (const convId of uniqueConvIds) {
-              const participantCount = await ConversationParticipants.count({
-                where: { conversation_id: convId },
-              });
-              if (participantCount === 2) {
-                foundConversation = await Conversations.findByPk(convId);
-                break;
-              }
-            }
-
-            if (!foundConversation) {
-              // Create new private conversation
-              conversation = await Conversations.create({
-                type: "private",
-              });
-
-              // Add both participants
-              await ConversationParticipants.bulkCreate([
-                {
-                  conversation_id: conversation.id,
-                  user_id: user1,
-                  role: "member",
-                },
-                {
-                  conversation_id: conversation.id,
-                  user_id: user2,
-                  role: "member",
-                },
-              ]);
-            } else {
-              conversation = foundConversation;
-            }
+          if (!conversationId) {
+            return socket.emit("error_message", "Conversation ID is required");
           }
-          // ─── GROUP CHAT ───────────────────────────────────────────
-          else if (conversationId) {
-            conversation = await Conversations.findByPk(conversationId);
 
-            if (!conversation) {
-              return socket.emit("error_message", "Conversation not found");
-            }
+          if (!senderUserId) {
+            return socket.emit("error_message", "Sender ID is required");
+          }
 
-            // Verify sender is a participant
-            const isParticipant = await ConversationParticipants.findOne({
-              where: {
-                conversation_id: conversationId,
-                user_id: senderUserId,
-              },
-            });
+          if (!message) {
+            return socket.emit("error_message", "Message is required");
+          }
 
-            if (!isParticipant) {
-              return socket.emit(
-                "error_message",
-                "You are not a participant in this conversation",
-              );
-            }
-          } else {
+          // Find the conversation
+          const conversation = await Conversations.findByPk(conversationId);
+
+          if (!conversation) {
+            return socket.emit("error_message", "Conversation not found");
+          }
+
+          // Verify sender is a participant in this conversation
+          const isParticipant = await ConversationParticipants.findOne({
+            where: {
+              conversation_id: conversationId,
+              user_id: senderUserId,
+            },
+          });
+
+          if (!isParticipant) {
             return socket.emit(
               "error_message",
-              "Invalid request: provide either receiverUserId or conversationId",
+              "You are not a participant in this conversation",
             );
           }
 
-          // Create message with 'sent' status
+          // Create the message
           const savedMessage = await Messages.create({
             sender_id: senderUserId,
             message,
-            conversation_id: conversation.id,
+            conversation_id: conversationId,
             status: "sent",
           });
 
-          // 1. FIRST: Emit confirmation to sender
+          console.log(`✅ Message saved with ID: ${savedMessage.id}`);
+
+          // Emit confirmation to sender
           socket.emit("message_sent", {
             messageId: savedMessage.id,
-            conversationId: conversation.id,
+            conversationId: conversationId,
             message: savedMessage,
           });
 
-          // 2. SECOND: Send to all participants
-          if (conversation.type === "private") {
-            // ─── PRIVATE CHAT: Send to receiver ─────────────────────
+          console.log(
+            `✅ Sent confirmation to sender with conversationId: ${conversationId}`,
+          );
+
+          // Get all participants in this conversation (except the sender)
+          const participants = await ConversationParticipants.findAll({
+            where: {
+              conversation_id: conversationId,
+              user_id: { [Op.ne]: senderUserId }, // Exclude sender
+            },
+          });
+
+          console.log(`📤 Sending to ${participants.length} participant(s)`);
+
+          let deliveredToAtLeastOne = false;
+
+          // Send message to all online participants
+          for (const participant of participants) {
+            const receiverUserId = participant.user_id;
+
+            // Get participant's online status
             const receiverStatus = await ActiveUsers.findOne({
               where: { user_id: receiverUserId },
             });
 
             if (
-              receiverStatus &&
-              receiverStatus.status === "online" &&
+              receiverStatus?.status === "online" &&
               receiverStatus.socket_id
             ) {
-              await savedMessage.update({ status: "delivered" });
+              deliveredToAtLeastOne = true;
 
               io.to(receiverStatus.socket_id).emit("receive_message", {
                 id: savedMessage.id,
                 sender_id: senderUserId,
                 receiver_id: receiverUserId,
                 message: savedMessage.message,
-                conversation_id: conversation.id,
+                conversation_id: conversationId,
                 createdAt: savedMessage.createdAt,
                 status: "delivered",
               });
 
-              socket.emit("message_delivered", {
-                messageId: savedMessage.id,
-                conversationId: conversation.id,
-              });
+              console.log(`✅ Message delivered to user ${receiverUserId}`);
+            } else {
+              console.log(`⚠️ User ${receiverUserId} is offline`);
             }
-          } else {
-            // ─── GROUP CHAT: Send to all participants except sender ─────
-            const participants = await ConversationParticipants.findAll({
-              where: { conversation_id: conversation.id },
+          }
+
+          // Update message status to delivered if at least one participant received it
+          if (deliveredToAtLeastOne) {
+            await savedMessage.update({ status: "delivered" });
+
+            socket.emit("message_delivered", {
+              messageId: savedMessage.id,
+              conversationId: conversationId,
             });
 
-            let deliveredToAtLeastOne = false;
-
-            for (const participant of participants) {
-              // Skip sender
-              if (participant.user_id === senderUserId) continue;
-
-              // Get participant's active status
-              const participantStatus = await ActiveUsers.findOne({
-                where: { user_id: participant.user_id },
-              });
-
-              if (
-                participantStatus &&
-                participantStatus.status === "online" &&
-                participantStatus.socket_id
-              ) {
-                deliveredToAtLeastOne = true;
-
-                io.to(participantStatus.socket_id).emit("receive_message", {
-                  id: savedMessage.id,
-                  sender_id: senderUserId,
-                  message: savedMessage.message,
-                  conversation_id: conversation.id,
-                  createdAt: savedMessage.createdAt,
-                  status: "delivered",
-                });
-              }
-            }
-
-            // Update status to delivered if at least one participant is online
-            if (deliveredToAtLeastOne) {
-              await savedMessage.update({ status: "delivered" });
-
-              socket.emit("message_delivered", {
-                messageId: savedMessage.id,
-                conversationId: conversation.id,
-              });
-            }
+            console.log(`✅ Message status updated to delivered`);
+          } else {
+            console.log(
+              `⚠️ No participants online, message will be delivered later`,
+            );
           }
         } catch (err) {
           console.error("❌ send_message error:", err);
@@ -234,12 +171,11 @@ export default function setupSocketHandlers(io) {
         if (message) {
           await message.update({ status: "delivered" });
 
-          // Get sender's active status
           const senderStatus = await ActiveUsers.findOne({
             where: { user_id: message.sender_id },
           });
 
-          if (senderStatus && senderStatus.socket_id) {
+          if (senderStatus?.socket_id) {
             io.to(senderStatus.socket_id).emit("message_delivered", {
               messageId: message.id,
               conversationId: message.conversation_id,
@@ -258,12 +194,11 @@ export default function setupSocketHandlers(io) {
         if (message) {
           await message.update({ status: "read" });
 
-          // Get sender's active status
           const senderStatus = await ActiveUsers.findOne({
             where: { user_id: message.sender_id },
           });
 
-          if (senderStatus && senderStatus.socket_id) {
+          if (senderStatus?.socket_id) {
             io.to(senderStatus.socket_id).emit("message_read", {
               messageId: message.id,
               conversationId: message.conversation_id,
@@ -278,20 +213,17 @@ export default function setupSocketHandlers(io) {
     // ─── DISCONNECT ─────────────────────────────────────────────
     socket.on("disconnect", async () => {
       try {
-        // Find user by socket_id
         const activeUser = await ActiveUsers.findOne({
           where: { socket_id: socket.id },
         });
 
         if (activeUser) {
-          // Update status to offline
           await activeUser.update({
             status: "offline",
             last_seen: new Date(),
             socket_id: null,
           });
 
-          // Broadcast to all clients that this user is offline
           io.emit("user_status_changed", {
             user_id: activeUser.user_id,
             status: "offline",

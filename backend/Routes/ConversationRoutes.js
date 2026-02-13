@@ -4,194 +4,126 @@ import {
   Users,
 } from "../Models/index.js";
 import express from "express";
+import { Op } from "sequelize";
 
 const router = express.Router();
 
-// Create a new conversation (private or group)
+// Create a new private conversation
 router.post("/create", async (req, res) => {
   try {
-    const {
-      sender_id,
-      receiver_id,
-      type,
-      name,
-      description,
-      group_photo,
-      participant_ids,
-    } = req.body;
+    const { sender_id, receiver_id } = req.body;
 
-    // Validation based on conversation type
-    if (type === "private") {
-      // For private chat: need sender_id and receiver_id
-      if (!sender_id || !receiver_id) {
-        return res.status(400).json({
-          error:
-            "sender_id and receiver_id are required for private conversations",
-        });
-      }
-
-      if (sender_id === receiver_id) {
-        return res.status(400).json({
-          error: "Cannot create conversation with yourself",
-        });
-      }
-
-      // Check if private conversation already exists between these two users
-      const existingConversations = await ConversationParticipants.findAll({
-        where: { user_id: [sender_id, receiver_id] },
-        attributes: ["conversation_id"],
-        include: [
-          {
-            model: Conversations,
-            as: "conversation",
-            where: { type: "private" },
-          },
-        ],
-      });
-
-      // Check if any conversation has exactly these 2 participants
-      const conversationIds = existingConversations.map(
-        (p) => p.conversation_id,
-      );
-      const uniqueConvIds = [...new Set(conversationIds)];
-
-      for (const convId of uniqueConvIds) {
-        const participantCount = await ConversationParticipants.count({
-          where: { conversation_id: convId },
-        });
-
-        if (participantCount === 2) {
-          // Conversation already exists
-          const existingConversation = await Conversations.findByPk(convId, {
-            include: [
-              {
-                model: Users,
-                as: "participants",
-                attributes: ["id", "name", "profile_photo", "phone_number"],
-                through: { attributes: ["role"] },
-              },
-            ],
-          });
-
-          return res.status(200).json({
-            message: "Conversation already exists",
-            conversation: existingConversation,
-            isNew: false,
-          });
-        }
-      }
-
-      // Create new private conversation
-      const conversation = await Conversations.create({
-        type: "private",
-      });
-
-      // Add both participants
-      await ConversationParticipants.bulkCreate([
-        {
-          conversation_id: conversation.id,
-          user_id: sender_id,
-          role: "member",
-        },
-        {
-          conversation_id: conversation.id,
-          user_id: receiver_id,
-          role: "member",
-        },
-      ]);
-
-      // Fetch complete conversation with participants
-      const completeConversation = await Conversations.findByPk(
-        conversation.id,
-        {
-          include: [
-            {
-              model: Users,
-              as: "participants",
-              attributes: ["id", "name", "profile_photo", "phone_number"],
-              through: { attributes: ["role"] },
-            },
-          ],
-        },
-      );
-
-      return res.status(201).json({
-        message: "Private conversation created successfully",
-        conversation: completeConversation,
-        isNew: true,
-      });
-    } else if (type === "group") {
-      // For group chat: need name, sender_id (creator), and participant_ids
-      if (!name || !sender_id) {
-        return res.status(400).json({
-          error:
-            "name and sender_id (creator) are required for group conversations",
-        });
-      }
-
-      if (
-        !participant_ids ||
-        !Array.isArray(participant_ids) ||
-        participant_ids.length < 2
-      ) {
-        return res.status(400).json({
-          error: "At least 2 participants are required for group conversations",
-        });
-      }
-
-      // Ensure sender is in participant list
-      const allParticipants = [...new Set([sender_id, ...participant_ids])];
-
-      // Create group conversation
-      const conversation = await Conversations.create({
-        type: "group",
-        name,
-        description: description || null,
-        group_photo: group_photo || null,
-        created_by: sender_id,
-      });
-
-      // Add all participants (creator as admin, others as members)
-      const participantsData = allParticipants.map((userId) => ({
-        conversation_id: conversation.id,
-        user_id: userId,
-        role: userId === sender_id ? "admin" : "member",
-      }));
-
-      await ConversationParticipants.bulkCreate(participantsData);
-
-      // Fetch complete conversation with participants
-      const completeConversation = await Conversations.findByPk(
-        conversation.id,
-        {
-          include: [
-            {
-              model: Users,
-              as: "participants",
-              attributes: ["id", "name", "profile_photo", "phone_number"],
-              through: { attributes: ["role"] },
-            },
-            {
-              model: Users,
-              as: "creator",
-              attributes: ["id", "name", "profile_photo"],
-            },
-          ],
-        },
-      );
-
-      return res.status(201).json({
-        message: "Group conversation created successfully",
-        conversation: completeConversation,
-        isNew: true,
-      });
-    } else {
+    // Validation
+    if (!sender_id || !receiver_id) {
       return res.status(400).json({
-        error: "Invalid conversation type. Must be 'private' or 'group'",
+        error: "sender_id and receiver_id are required",
       });
     }
+
+    if (sender_id === receiver_id) {
+      return res.status(400).json({
+        error: "Cannot create conversation with yourself",
+      });
+    }
+
+    // Check if both users exist in database
+    const users = await Users.findAll({
+      where: {
+        id: {
+          [Op.in]: [sender_id, receiver_id],
+        },
+      },
+      attributes: ["id", "name", "profile_photo", "phone_number"],
+    });
+
+    if (users.length !== 2) {
+      return res.status(404).json({
+        error: "One or both users not found",
+      });
+    }
+
+    // Check if private conversation already exists between these two users
+    const existingConversations = await ConversationParticipants.findAll({
+      where: {
+        user_id: {
+          [Op.in]: [sender_id, receiver_id],
+        },
+      },
+      attributes: ["conversation_id"],
+      include: [
+        {
+          model: Conversations,
+          as: "conversation",
+          where: { type: "private" },
+          required: true,
+        },
+      ],
+    });
+
+    // Group by conversation_id and find one with exactly 2 participants
+    const conversationIds = existingConversations.map((p) => p.conversation_id);
+    const uniqueConvIds = [...new Set(conversationIds)];
+
+    for (const convId of uniqueConvIds) {
+      const participants = await ConversationParticipants.findAll({
+        where: { conversation_id: convId },
+        attributes: ["user_id"],
+      });
+
+      const participantIds = participants.map((p) => p.user_id);
+
+      // Check if this conversation has exactly these 2 users
+      if (
+        participants.length === 2 &&
+        participantIds.includes(sender_id) &&
+        participantIds.includes(receiver_id)
+      ) {
+        // Conversation already exists - get the other user's info
+        const existingConversation = await Conversations.findByPk(convId);
+
+        const otherUser = users.find((u) => u.id !== sender_id);
+
+        return res.status(200).json({
+          message: "Conversation already exists",
+          conversationId: existingConversation.id,
+          ...otherUser.toJSON(),
+          isNew: false,
+        });
+      }
+    }
+
+    // Create new private conversation
+    const conversation = await Conversations.create({
+      type: "private",
+    });
+
+    console.log("✅ Created new conversation with ID:", conversation.id);
+
+    // Add both participants
+    await ConversationParticipants.bulkCreate([
+      {
+        conversation_id: conversation.id,
+        user_id: sender_id,
+        role: "member",
+      },
+      {
+        conversation_id: conversation.id,
+        user_id: receiver_id,
+        role: "member",
+      },
+    ]);
+
+    // Get the other user's info
+    const otherUser = users.find((u) => u.id !== sender_id);
+
+    return res.status(201).json({
+      message: "Private conversation created successfully",
+      conversationId: conversation.id,
+      ...otherUser.toJSON(),
+      isNew: true,
+    });
   } catch (err) {
-    console.error("Error creating conversation:", err);
+    console.error("❌ Error creating conversation:", err);
     res.status(500).json({ error: err.message });
   }
 });

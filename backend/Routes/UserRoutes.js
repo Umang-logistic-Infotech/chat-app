@@ -513,6 +513,7 @@ router.post("/register", async (req, res) => {
         phone_number: newUser.phone_number,
         profile_photo: newUser.profile_photo || null,
       },
+      token: token,
     });
   } catch (err) {
     if (err.name === "SequelizeUniqueConstraintError") {
@@ -594,6 +595,7 @@ router.post("/login", async (req, res) => {
 router.post("/logout", (req, res) => {
   res.clearCookie("token");
   res.clearCookie("user");
+  localStorage.removeItem("token");
   res.json({ message: "Logged out successfully" });
 });
 

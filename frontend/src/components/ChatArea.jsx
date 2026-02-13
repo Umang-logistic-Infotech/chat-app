@@ -30,7 +30,6 @@ export default function ChatArea({
   selectedChat,
   currentUser,
   messages,
-  conversationId,
   onSend,
   isOnline,
 }) {

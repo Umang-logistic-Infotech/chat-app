@@ -13,7 +13,6 @@ import {
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import AddIcon from "@mui/icons-material/Add";
-import GroupAddIcon from "@mui/icons-material/GroupAdd";
 import ListItem from "@mui/material/ListItem";
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
@@ -192,21 +191,17 @@ export default function Home() {
 
   // ── Handle new chat creation ──
   const handleChatCreated = (chatData, isNew) => {
-    // Check if chat already exists in the list
     const existingChatIndex = chats.findIndex(
       (chat) => chat.id === chatData.id,
     );
 
     if (existingChatIndex !== -1) {
-      // Chat already exists, just select it
       setSelectedChat(chatData);
     } else {
-      // Add new chat to the list
       setChats((prev) => [chatData, ...prev]);
       setSelectedChat(chatData);
     }
 
-    // If it's a new conversation, initialize empty messages
     if (isNew && chatData.conversationId) {
       setMessages((prev) => ({
         ...prev,
@@ -229,15 +224,20 @@ export default function Home() {
       status: "sending",
     };
 
+    // Use conversationId if it exists, otherwise use temp key based on receiver ID
     const messageKey = selectedChat.conversationId;
+
+    console.log("📤 Sending message with key:", messageKey);
 
     setMessages((prev) => ({
       ...prev,
       [messageKey]: [...(prev[messageKey] || []), newMessage],
     }));
 
-    sendMessage({ receiverUserId: selectedChat.id, message: text })
+    sendMessage({ conversationId: selectedChat.conversationId, message: text })
       .then((response) => {
+        console.log("✅ Send message response:", response);
+
         setMessages((prev) => {
           const conversationMessages = prev[messageKey] || [];
           return {
@@ -247,25 +247,69 @@ export default function Home() {
                 ? {
                     ...msg,
                     id: response.messageId || response.message?.id || msg.id,
+                    conversation_id: response.conversationId,
                     status: "sent",
                   }
                 : msg,
             ),
           };
         });
+
+        // If this is a new conversation, migrate messages to the new conversationId
+        if (!selectedChat.conversationId && response.conversationId) {
+          console.log(
+            "🆕 Setting up new conversation with ID:",
+            response.conversationId,
+          );
+
+          setMessages((prev) => {
+            const oldMessages = prev[messageKey] || [];
+            const updatedMessages = { ...prev };
+
+            // Add messages under new conversationId
+            updatedMessages[response.conversationId] = oldMessages.map(
+              (msg) => ({
+                ...msg,
+                conversation_id: response.conversationId,
+              }),
+            );
+
+            // Remove old temp key entry
+            if (messageKey !== response.conversationId) {
+              delete updatedMessages[messageKey];
+            }
+
+            return updatedMessages;
+          });
+
+          // Update chat list with conversationId
+          setChats((prevChats) =>
+            prevChats.map((chat) =>
+              chat.id === selectedChat.id
+                ? { ...chat, conversationId: response.conversationId }
+                : chat,
+            ),
+          );
+
+          // Update selected chat with conversationId
+          setSelectedChat((prev) => ({
+            ...prev,
+            conversationId: response.conversationId,
+          }));
+        }
       })
       .catch((error) => {
-        console.error("Failed to send message:", error);
+        console.error("❌ Failed to send message:", error);
         setMessages((prev) => ({
           ...prev,
-          [messageKey]: prev[messageKey].map((msg) =>
-            msg.id === tempId ? { ...msg, status: "failed" } : msg,
-          ),
+          [messageKey]:
+            prev[messageKey]?.map((msg) =>
+              msg.id === tempId ? { ...msg, status: "failed" } : msg,
+            ) || [],
         }));
       });
   };
 
-  // Get last message and unread count for each chat
   const getLastMessage = (chat) => {
     const chatMessages =
       messages[chat.conversationId] || messages[`temp_${chat.id}`] || [];
@@ -289,7 +333,6 @@ export default function Home() {
     chat.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  // Format time for last message preview
   const formatLastMessageTime = (timestamp) => {
     if (!timestamp) return "";
     const date = new Date(timestamp);
@@ -354,16 +397,6 @@ export default function Home() {
             <Typography variant="h5" fontWeight={700} color="white">
               Chats
             </Typography>
-            <IconButton
-              size="small"
-              sx={{
-                bgcolor: "rgba(255,255,255,0.2)",
-                color: "white",
-                "&:hover": { bgcolor: "rgba(255,255,255,0.3)" },
-              }}
-            >
-              <GroupAddIcon />
-            </IconButton>
           </Box>
 
           {/* Search Bar */}
@@ -595,6 +628,7 @@ export default function Home() {
       <ChatArea
         selectedChat={selectedChat}
         conversationId={selectedChat?.conversationId || null}
+        receiverId={selectedChat?.id || null}
         currentUser={user}
         messages={currentMessages}
         onSend={handleSend}

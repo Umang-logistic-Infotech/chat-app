@@ -22,7 +22,7 @@ const __dirname = path.dirname(__filename);
 // ─── Middleware ───────────────────────────────────────────────
 app.use(
   cors({
-    origin: process.env.FRONT_END_URL || "http://192.168.0.131:3000",
+    origin: "http://192.168.0.131:3000",
     credentials: true,
   }),
 );
@@ -62,7 +62,7 @@ setupSocketHandlers(io);
 
 // ─── Listen (use httpServer, not app) ─────────────────────────
 const PORT = process.env.PORT;
-httpServer.listen(PORT, () => {
-  // httpServer.listen(PORT, "192.168.0.131", () => {
+// httpServer.listen(PORT, () => {
+httpServer.listen(PORT, "192.168.0.131", () => {
   console.log(`🚀 Server running on port http://192.168.0.131:${PORT}`);
 });

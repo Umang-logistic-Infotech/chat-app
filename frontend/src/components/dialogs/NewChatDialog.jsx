@@ -64,23 +64,35 @@ export default function NewChatDialog({
       const response = await api.post(`${baseurl}/conversations/create`, {
         sender_id: currentUserId,
         receiver_id: user.id,
-        type: "private",
       });
 
-      console.log("Chat created:", response.data);
+      console.log("Chat created response:", response.data);
 
-      // Close dialog and notify parent
-      onClose();
+      // The response.data structure is:
+      // {
+      //   conversationId: number,
+      //   id: number (other user's id),
+      //   name: string,
+      //   profile_photo: string|null,
+      //   phone_number: number,
+      //   isNew: boolean
+      // }
 
-      // Format the user data for the chat
+      // Format the chat data with conversationId
       const chatData = {
-        id: user.id,
-        name: user.name,
-        profile_photo: user.profile_photo,
-        phone_number: user.phone_number,
-        conversationId: response.data.conversation.id,
+        id: response.data.id, // Other user's ID
+        name: response.data.name,
+        profile_photo: response.data.profile_photo,
+        phone_number: response.data.phone_number,
+        conversationId: response.data.conversationId, // Conversation ID
       };
 
+      console.log("Formatted chat data:", chatData);
+
+      // Close dialog first
+      onClose();
+
+      // Notify parent component with the chat data
       onChatCreated(chatData, response.data.isNew);
     } catch (error) {
       console.error("Error creating chat:", error);
