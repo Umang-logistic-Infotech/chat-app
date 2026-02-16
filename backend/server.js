@@ -24,7 +24,7 @@ const __dirname = path.dirname(__filename);
 // ─── Middleware ───────────────────────────────────────────────
 app.use(
   cors({
-    origin: "http://192.168.0.131:3000",
+    origin: process.env.FRONT_END_URL,
     credentials: true,
   }),
 );
