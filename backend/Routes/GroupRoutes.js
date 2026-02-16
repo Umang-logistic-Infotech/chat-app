@@ -13,14 +13,6 @@ router.post("/create", upload.single("group_photo"), async (req, res) => {
   try {
     const { name, description, memberIds, createdBy } = req.body;
 
-    console.log("Creating group with data:", {
-      name,
-      description,
-      memberIds,
-      createdBy,
-      file: req.file,
-    });
-
     const parsedMemberIds = JSON.parse(memberIds);
 
     if (!name || !parsedMemberIds || parsedMemberIds.length < 2) {
@@ -42,8 +34,6 @@ router.post("/create", upload.single("group_photo"), async (req, res) => {
       group_photo: groupPhotoUrl,
     });
 
-    console.log("Conversation created:", conversation.id);
-
     const participantsData = parsedMemberIds.map((userId) => ({
       conversation_id: conversation.id,
       user_id: userId,
@@ -51,8 +41,6 @@ router.post("/create", upload.single("group_photo"), async (req, res) => {
     }));
 
     await ConversationParticipants.bulkCreate(participantsData);
-
-    console.log("Participants created");
 
     const groupData = await Conversations.findOne({
       where: { id: conversation.id },
@@ -75,8 +63,6 @@ router.post("/create", upload.single("group_photo"), async (req, res) => {
         },
       ],
     });
-
-    console.log("Group data fetched:", groupData);
 
     res.status(201).json({
       success: true,

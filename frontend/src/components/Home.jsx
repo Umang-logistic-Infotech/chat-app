@@ -3,11 +3,11 @@ import {
   Box,
   ListItemText,
   List,
-  Avatar,
   ListItemAvatar,
   Paper,
   InputBase,
   IconButton,
+  Avatar,
   CircularProgress,
   Chip,
   Fab,
@@ -88,52 +88,60 @@ export default function Home() {
 
   async function fetchMessagesForConversation(
     conversationId,
-    page = 1,
+    beforeId = null,
     limit = 15,
   ) {
     if (!conversationId) {
-      return;
+      return { messages: [], hasMore: false };
     }
 
     try {
-      const response = await api.get(
-        `${baseurl}/users/${conversationId}?page=${page}&limit=${limit}`,
-      );
+      let url = `${baseurl}/users/${conversationId}?limit=${limit}`;
+      if (beforeId) {
+        url += `&before_id=${beforeId}`;
+      }
+
+      const response = await api.get(url);
 
       const newMessages = response.data.messages || response.data;
       const paginationData = response.data.pagination;
 
-      const hasMore = paginationData
-        ? paginationData.hasMore
-        : newMessages.length === limit;
-
+      const hasMore = paginationData?.hasMore ?? false;
+      const oldestMessageId = paginationData?.oldestMessageId;
       const totalMessages = paginationData?.totalMessages || 0;
 
-      setMessages((prev) => ({
-        ...prev,
-        [conversationId]:
-          page === 1
-            ? newMessages
-            : [...newMessages, ...(prev[conversationId] || [])],
-      }));
+      setMessages((prev) => {
+        const existingMessages = prev[conversationId] || [];
+
+        if (!beforeId) {
+          return {
+            ...prev,
+            [conversationId]: newMessages,
+          };
+        } else {
+          return {
+            ...prev,
+            [conversationId]: [...newMessages, ...existingMessages],
+          };
+        }
+      });
 
       setMessagesPagination((prev) => ({
         ...prev,
         [conversationId]: {
-          currentPage: page,
           hasMore: hasMore,
+          oldestMessageId: oldestMessageId,
           totalMessages: totalMessages,
-          totalLoaded:
-            page === 1
-              ? newMessages.length
-              : (prev[conversationId]?.totalLoaded || 0) + newMessages.length,
+          totalLoaded: beforeId
+            ? (prev[conversationId]?.totalLoaded || 0) + newMessages.length
+            : newMessages.length,
         },
       }));
 
-      return { messages: newMessages, hasMore };
+      return { messages: newMessages, hasMore, oldestMessageId };
     } catch (error) {
       console.error("Error fetching messages:", error);
-      return { messages: [], hasMore: false };
+      return { messages: [], hasMore: false, oldestMessageId: null };
     }
   }
 
@@ -142,24 +150,30 @@ export default function Home() {
       return;
     }
 
-    if (loadingOldMessages[conversationId]) {
+    const currentlyLoading = loadingOldMessages[conversationId];
+
+    if (currentlyLoading) {
       return;
     }
 
     const pagination = messagesPagination[conversationId];
 
+    const currentMessages = messages[conversationId] || [];
+
     if (pagination && !pagination.hasMore) {
       return;
     }
 
-    const nextPage = pagination ? pagination.currentPage + 1 : 2;
+    const oldestMessageId = pagination?.oldestMessageId;
 
-    setLoadingOldMessages((prev) => ({ ...prev, [conversationId]: true }));
+    setLoadingOldMessages((prev) => {
+      return { ...prev, [conversationId]: true };
+    });
 
     try {
       const result = await fetchMessagesForConversation(
         conversationId,
-        nextPage,
+        oldestMessageId,
         15,
       );
 
@@ -173,18 +187,19 @@ export default function Home() {
         }));
       }
     } catch (error) {
-      console.error("Error loading older messages:", error);
+      console.error("❌ Error loading older messages:", error);
     } finally {
-      setLoadingOldMessages((prev) => ({ ...prev, [conversationId]: false }));
+      setLoadingOldMessages((prev) => {
+        return { ...prev, [conversationId]: false };
+      });
     }
   };
 
   useEffect(() => {
     if (selectedChat?.conversationId) {
       if (!messages[selectedChat.conversationId]) {
-        fetchMessagesForConversation(selectedChat.conversationId, 1, 15);
+        fetchMessagesForConversation(selectedChat.conversationId, null, 15);
       }
-
       const chatMessages = messages[selectedChat.conversationId] || [];
       chatMessages.forEach((msg) => {
         if (msg.sender_id !== user.id && msg.status !== "read") {

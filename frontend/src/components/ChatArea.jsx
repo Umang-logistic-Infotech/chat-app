@@ -632,12 +632,11 @@ export default function ChatArea({
             }}
             alignToBottom
             atBottomStateChange={setAtBottom}
-            atBottomThreshold={50}
             initialTopMostItemIndex={messages.length - 1}
             style={{
               height: "100%",
             }}
-            defaultItemHeight={80}
+            overscan={200}
           />
         )}
       </Box>

@@ -130,13 +130,13 @@ router.get("/test/:id", async (req, res) => {
 router.get("/:conversationId", async (req, res) => {
   try {
     const conversationId = parseInt(req.params.conversationId);
-    const page = parseInt(req.query.page);
-    const limit = parseInt(req.query.limit);
+    const beforeId = req.query.before_id ? parseInt(req.query.before_id) : null;
+    const limit = parseInt(req.query.limit) || 15;
+
     if (isNaN(conversationId)) {
       return res.status(400).json({ error: "Invalid conversation ID" });
     }
 
-    // Verify conversation exists
     const conversation = await Conversations.findByPk(conversationId);
     if (!conversation) {
       return res.status(404).json({ error: "Conversation not found" });
@@ -145,15 +145,19 @@ router.get("/:conversationId", async (req, res) => {
     const totalMessages = await Messages.count({
       where: { conversation_id: conversationId },
     });
-    const totalPages = Math.ceil(totalMessages / limit);
-    const hasMore = page < totalPages;
-    const offset = (page - 1) * limit;
-    // Get all messages for this conversation
+
+    const whereClause = {
+      conversation_id: conversationId,
+    };
+
+    if (beforeId) {
+      whereClause.id = { [Op.lt]: beforeId };
+    }
+
     const messages = await Messages.findAll({
-      where: { conversation_id: conversationId },
-      order: [["createdAt", "DESC"]],
+      where: whereClause,
+      order: [["id", "DESC"]],
       limit: limit,
-      offset: offset,
       include: [
         {
           model: Users,
@@ -164,14 +168,25 @@ router.get("/:conversationId", async (req, res) => {
     });
 
     const reversedMessages = messages.reverse();
+
+    const oldestMessageId =
+      reversedMessages.length > 0 ? reversedMessages[0].id : null;
+
+    const newestMessageId =
+      reversedMessages.length > 0
+        ? reversedMessages[reversedMessages.length - 1].id
+        : null;
+
+    const hasMore = messages.length === limit;
+
     res.json({
       messages: reversedMessages,
       pagination: {
-        currentPage: page,
         limit: limit,
         totalMessages: totalMessages,
-        totalPages: totalPages,
         hasMore: hasMore,
+        oldestMessageId: oldestMessageId,
+        newestMessageId: newestMessageId,
       },
       type: conversation.type,
     });

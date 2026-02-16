@@ -9,8 +9,6 @@ import { Op } from "sequelize";
 
 export default function setupSocketHandlers(io) {
   io.on("connection", (socket) => {
-    console.log("✅ New socket connection:", socket.id);
-
     socket.on("register", async (userId) => {
       try {
         await ActiveUsers.upsert({
@@ -19,8 +17,6 @@ export default function setupSocketHandlers(io) {
           socket_id: socket.id,
           last_seen: new Date(),
         });
-
-        console.log(`✅ User ${userId} registered with socket ${socket.id}`);
 
         io.emit("user_status_changed", {
           user_id: userId,
@@ -35,12 +31,6 @@ export default function setupSocketHandlers(io) {
       "send_message",
       async ({ senderUserId, conversationId, message }) => {
         try {
-          console.log("📨 Sending message:", {
-            senderUserId,
-            conversationId,
-            message,
-          });
-
           if (!conversationId) {
             return socket.emit("error_message", "Conversation ID is required");
           }
@@ -123,10 +113,6 @@ export default function setupSocketHandlers(io) {
               receiverStatus.socket_id
             ) {
               deliveredToAtLeastOne = true;
-
-              console.log(
-                `📤 Sending to user ${receiverUserId} on socket ${receiverStatus.socket_id}`,
-              );
 
               io.to(receiverStatus.socket_id).emit("receive_message", {
                 ...messageData,
@@ -261,8 +247,6 @@ export default function setupSocketHandlers(io) {
 
     socket.on("disconnect", async () => {
       try {
-        console.log("❌ Socket disconnected:", socket.id);
-
         const activeUser = await ActiveUsers.findOne({
           where: { socket_id: socket.id },
         });

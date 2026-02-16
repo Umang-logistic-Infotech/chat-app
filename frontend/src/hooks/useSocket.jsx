@@ -13,8 +13,6 @@ export default function useSocket(userId) {
   useEffect(() => {
     if (!userId) return;
 
-    console.log("🔌 Connecting to socket server...");
-
     const socket = io(BACKEND_URL, {
       transports: ["websocket"],
       reconnection: true,
@@ -25,18 +23,15 @@ export default function useSocket(userId) {
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      console.log("✅ Socket connected:", socket.id);
       socket.emit("register", userId);
     });
 
     socket.on("receive_message", (message) => {
-      console.log("📨 Received message:", message);
       setIncomingMessage({ ...message, _timestamp: Date.now() });
       socket.emit("message_delivered", message.id);
     });
 
     socket.on("message_status_update", (data) => {
-      console.log("📊 Message status update:", data);
       setMessageStatusUpdate({
         messageId: data.messageId || data.id,
         status: data.status,
@@ -46,7 +41,6 @@ export default function useSocket(userId) {
     });
 
     socket.on("message_sent", (data) => {
-      console.log("✅ Message sent confirmation:", data);
       setMessageStatusUpdate({
         messageId: data.messageId || data.id || data.message?.id,
         status: "sent",
@@ -56,7 +50,6 @@ export default function useSocket(userId) {
     });
 
     socket.on("user_status_changed", (data) => {
-      console.log("👤 User status changed:", data);
       setUserStatusUpdate({
         user_id: data.user_id,
         status: data.status,
@@ -66,7 +59,6 @@ export default function useSocket(userId) {
     });
 
     socket.on("user_typing", (data) => {
-      console.log("✍️ User typing:", data);
       setTypingStatus({
         conversationId: data.conversationId,
         userId: data.userId,
@@ -90,14 +82,12 @@ export default function useSocket(userId) {
     });
 
     return () => {
-      console.log("🔌 Disconnecting socket...");
       socket.disconnect();
     };
   }, [userId]);
 
   function markMessageAsRead(messageId) {
     if (socketRef.current && socketRef.current.connected) {
-      console.log("👁️ Marking message as read:", messageId);
       socketRef.current.emit("message_read", messageId);
     }
   }
@@ -120,8 +110,6 @@ export default function useSocket(userId) {
         message: options.message || options.text,
       };
 
-      console.log("📤 Sending message:", messageData);
-
       socketRef.current.emit("send_message", messageData);
 
       let resolved = false;
@@ -129,7 +117,6 @@ export default function useSocket(userId) {
       const onSent = (response) => {
         if (!resolved) {
           resolved = true;
-          console.log("✅ Message sent successfully:", response);
           resolve({
             messageId:
               response.messageId || response.id || response.message?.id,

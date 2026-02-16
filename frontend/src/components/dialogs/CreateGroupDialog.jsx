@@ -55,8 +55,6 @@ export default function CreateGroupDialog({
       setLoading(true);
       const response = await api.get(`${baseurl}/users/list/${currentUserId}`);
 
-      console.log("Fetched users response:", response.data);
-
       // Ensure response.data is an array
       const usersData = Array.isArray(response.data) ? response.data : [];
       const users = usersData.filter((user) => user.id !== currentUserId);
