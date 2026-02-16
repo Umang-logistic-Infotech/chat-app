@@ -30,7 +30,6 @@ export default function NewChatDialog({
 
   useEffect(() => {
     if (open && currentUserId) {
-      console.log("Dialog opened, fetching users for:", currentUserId);
       fetchUsers();
     }
   }, [open, currentUserId]);
@@ -40,10 +39,8 @@ export default function NewChatDialog({
       setLoading(true);
       setError(null);
 
-      console.log("Fetching from:", `${baseurl}/users/list/${currentUserId}`);
       const response = await api.get(`${baseurl}/users/list/${currentUserId}`);
 
-      console.log("Users fetched:", response.data);
       setUsers(response.data);
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -58,25 +55,11 @@ export default function NewChatDialog({
     try {
       setCreatingChat(true);
 
-      console.log("Creating chat with user:", user);
-
       // Create or get existing private conversation
       const response = await api.post(`${baseurl}/conversations/create`, {
         sender_id: currentUserId,
         receiver_id: user.id,
       });
-
-      console.log("Chat created response:", response.data);
-
-      // The response.data structure is:
-      // {
-      //   conversationId: number,
-      //   id: number (other user's id),
-      //   name: string,
-      //   profile_photo: string|null,
-      //   phone_number: number,
-      //   isNew: boolean
-      // }
 
       // Format the chat data with conversationId
       const chatData = {
@@ -86,8 +69,6 @@ export default function NewChatDialog({
         phone_number: response.data.phone_number,
         conversationId: response.data.conversationId, // Conversation ID
       };
-
-      console.log("Formatted chat data:", chatData);
 
       // Close dialog first
       onClose();

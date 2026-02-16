@@ -9,8 +9,6 @@ import { Op } from "sequelize";
 
 export default function setupSocketHandlers(io) {
   io.on("connection", (socket) => {
-    console.log("🔌 New client connected:", socket.id);
-
     // User registers their socket connection
     socket.on("register", async (userId) => {
       try {
@@ -25,8 +23,6 @@ export default function setupSocketHandlers(io) {
           user_id: userId,
           status: "online",
         });
-
-        console.log(`✅ User ${userId} is now online`);
       } catch (error) {
         console.error("❌ Error updating user status:", error);
       }
@@ -36,13 +32,6 @@ export default function setupSocketHandlers(io) {
     socket.on(
       "send_message",
       async ({ senderUserId, conversationId, message }) => {
-        console.log(
-          "📨 Sending message from",
-          senderUserId,
-          "to conversation",
-          conversationId,
-        );
-
         try {
           if (!conversationId) {
             return socket.emit("error_message", "Conversation ID is required");
@@ -86,18 +75,12 @@ export default function setupSocketHandlers(io) {
             status: "sent",
           });
 
-          console.log(`✅ Message saved with ID: ${savedMessage.id}`);
-
           // Emit confirmation to sender
           socket.emit("message_sent", {
             messageId: savedMessage.id,
             conversationId: conversationId,
             message: savedMessage,
           });
-
-          console.log(
-            `✅ Sent confirmation to sender with conversationId: ${conversationId}`,
-          );
 
           // Get all participants in this conversation (except the sender)
           const participants = await ConversationParticipants.findAll({
@@ -106,8 +89,6 @@ export default function setupSocketHandlers(io) {
               user_id: { [Op.ne]: senderUserId }, // Exclude sender
             },
           });
-
-          console.log(`📤 Sending to ${participants.length} participant(s)`);
 
           let deliveredToAtLeastOne = false;
 
@@ -135,8 +116,6 @@ export default function setupSocketHandlers(io) {
                 createdAt: savedMessage.createdAt,
                 status: "delivered",
               });
-
-              console.log(`✅ Message delivered to user ${receiverUserId}`);
             } else {
               console.log(`⚠️ User ${receiverUserId} is offline`);
             }
@@ -150,8 +129,6 @@ export default function setupSocketHandlers(io) {
               messageId: savedMessage.id,
               conversationId: conversationId,
             });
-
-            console.log(`✅ Message status updated to delivered`);
           } else {
             console.log(
               `⚠️ No participants online, message will be delivered later`,
@@ -229,8 +206,6 @@ export default function setupSocketHandlers(io) {
             status: "offline",
             last_seen: activeUser.last_seen,
           });
-
-          console.log(`❌ User ${activeUser.user_id} is now offline`);
         }
       } catch (error) {
         console.error("❌ Error updating user status on disconnect:", error);

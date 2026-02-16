@@ -130,7 +130,8 @@ router.get("/test/:id", async (req, res) => {
 router.get("/:conversationId", async (req, res) => {
   try {
     const conversationId = parseInt(req.params.conversationId);
-
+    const page = parseInt(req.query.page);
+    const limit = parseInt(req.query.limit);
     if (isNaN(conversationId)) {
       return res.status(400).json({ error: "Invalid conversation ID" });
     }
@@ -141,10 +142,18 @@ router.get("/:conversationId", async (req, res) => {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
+    const totalMessages = await Messages.count({
+      where: { conversation_id: conversationId },
+    });
+    const totalPages = Math.ceil(totalMessages / limit);
+    const hasMore = page < totalPages;
+    const offset = (page - 1) * limit;
     // Get all messages for this conversation
     const messages = await Messages.findAll({
       where: { conversation_id: conversationId },
-      order: [["createdAt", "ASC"]],
+      order: [["createdAt", "DESC"]],
+      limit: limit,
+      offset: offset,
       include: [
         {
           model: Users,
@@ -154,7 +163,17 @@ router.get("/:conversationId", async (req, res) => {
       ],
     });
 
-    res.json(messages);
+    const reversedMessages = messages.reverse();
+    res.json({
+      messages: reversedMessages,
+      pagination: {
+        currentPage: page,
+        limit: limit,
+        totalMessages: totalMessages,
+        totalPages: totalPages,
+        hasMore: hasMore,
+      },
+    });
   } catch (err) {
     console.error("Error fetching messages:", err);
     res.status(500).json({ error: err.message });
@@ -595,7 +614,7 @@ router.post("/login", async (req, res) => {
 router.post("/logout", (req, res) => {
   res.clearCookie("token");
   res.clearCookie("user");
-  localStorage.removeItem("token");
+  // localStorage.removeItem("token");
   res.json({ message: "Logged out successfully" });
 });
 
@@ -634,7 +653,7 @@ router.put("/:id", upload.single("profile_photo"), async (req, res) => {
     // Store the image URL if file was uploaded
     if (req.file) {
       // Store the URL that the frontend can use to access the image
-      updateData.profile_photo = `process.env.REACT_APP_API_URL/uploads/${req.file.filename}`;
+      updateData.profile_photo = `${process.env.FRONT_END_URL}/uploads/${req.file.filename}`;
     }
 
     const updatedUser = await Users.updateUser(req.params.id, updateData);

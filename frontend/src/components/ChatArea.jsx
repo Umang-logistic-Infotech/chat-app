@@ -11,6 +11,7 @@ import {
   ListItemIcon,
   ListItemText,
   Tooltip,
+  CircularProgress,
 } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
@@ -24,7 +25,8 @@ import DoneIcon from "@mui/icons-material/Done";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
+import { Virtuoso } from "react-virtuoso";
 
 export default function ChatArea({
   selectedChat,
@@ -32,14 +34,79 @@ export default function ChatArea({
   messages,
   onSend,
   isOnline,
+  onLoadOlderMessages,
+  isLoadingOldMessages,
+  hasMoreMessages,
 }) {
-  const messagesEndRef = useRef(null);
+  const virtuosoRef = useRef(null);
   const [inputText, setInputText] = useState("");
   const [menuAnchor, setMenuAnchor] = useState(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const prevMessageCountRef = useRef(0);
+  const [firstItemIndex, setFirstItemIndex] = useState(100000);
+  const initializedRef = useRef(false);
+  const isLoadingOldRef = useRef(false);
+
+  const START_INDEX = 100000;
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (selectedChat?.id) {
+      const newFirstIndex = START_INDEX - messages.length;
+      setFirstItemIndex(newFirstIndex);
+      prevMessageCountRef.current = messages.length;
+      initializedRef.current = true;
+      isLoadingOldRef.current = false;
+
+      setTimeout(() => {
+        if (virtuosoRef.current && messages.length > 0) {
+          virtuosoRef.current.scrollTo({
+            top: 999999,
+            behavior: "auto",
+          });
+        }
+      }, 100);
+    }
+  }, [selectedChat?.id]);
+
+  useEffect(() => {
+    if (!initializedRef.current) return;
+
+    const messageCountChanged = messages.length !== prevMessageCountRef.current;
+
+    if (messageCountChanged && messages.length > 0) {
+      const diff = messages.length - prevMessageCountRef.current;
+      const lastMessage = messages[messages.length - 1];
+      const isMyMessage =
+        String(lastMessage?.sender_id) === String(currentUser?.id);
+
+      if (isLoadingOldRef.current && diff > 0) {
+        setFirstItemIndex((prev) => prev - diff);
+        isLoadingOldRef.current = false;
+      } else if (diff > 0) {
+        if (isMyMessage || atBottom) {
+          requestAnimationFrame(() => {
+            if (virtuosoRef.current) {
+              virtuosoRef.current.scrollTo({
+                top: 999999,
+                behavior: "auto",
+              });
+            }
+          });
+
+          setTimeout(() => {
+            if (virtuosoRef.current) {
+              virtuosoRef.current.scrollTo({
+                top: 999999,
+                behavior: "smooth",
+              });
+            }
+          }, 100);
+        }
+      }
+
+      prevMessageCountRef.current = messages.length;
+    }
+  }, [messages, currentUser?.id, atBottom]);
 
   const formatTime = (timestamp) => {
     if (!timestamp) return "";
@@ -92,18 +159,10 @@ export default function ChatArea({
     const currentDate = new Date(currentMsg.createdAt);
     const previousDate = new Date(previousMsg.createdAt);
 
-    const currentDay = new Date(
-      currentDate.getFullYear(),
-      currentDate.getMonth(),
-      currentDate.getDate(),
-    );
-    const previousDay = new Date(
-      previousDate.getFullYear(),
-      previousDate.getMonth(),
-      previousDate.getDate(),
-    );
+    const currentDay = currentDate.toDateString();
+    const previousDay = previousDate.toDateString();
 
-    return currentDay.getTime() !== previousDay.getTime();
+    return currentDay !== previousDay;
   };
 
   const getMessageStatusIcon = (msg) => {
@@ -146,6 +205,147 @@ export default function ChatArea({
     onSend(inputText.trim());
     setInputText("");
   };
+
+  const loadMore = useCallback(() => {
+    if (
+      !isLoadingOldMessages &&
+      hasMoreMessages &&
+      selectedChat?.conversationId
+    ) {
+      isLoadingOldRef.current = true;
+      onLoadOlderMessages(selectedChat.conversationId);
+    }
+  }, [
+    isLoadingOldMessages,
+    hasMoreMessages,
+    selectedChat,
+    onLoadOlderMessages,
+  ]);
+
+  const Header = () => {
+    if (!hasMoreMessages) return null;
+
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          py: 2,
+        }}
+      >
+        {isLoadingOldMessages ? (
+          <CircularProgress size={24} />
+        ) : (
+          <Typography variant="caption" color="text.secondary">
+            Scroll up to load more
+          </Typography>
+        )}
+      </Box>
+    );
+  };
+
+  const itemContent = useCallback(
+    (index, msg) => {
+      if (!msg) {
+        return <Box key={`empty-${index}`} />;
+      }
+
+      const arrayIndex = index - firstItemIndex;
+      const previousMsg = arrayIndex > 0 ? messages[arrayIndex - 1] : null;
+
+      const isMine =
+        String(msg.sender_id || msg.sender_user_id) === String(currentUser?.id);
+      const showDateSeparator = shouldShowDateSeparator(msg, previousMsg);
+
+      return (
+        <Box key={msg.id || index}>
+          {showDateSeparator && (
+            <Box sx={{ display: "flex", justifyContent: "center", my: 3 }}>
+              <Chip
+                label={formatDate(msg.createdAt)}
+                size="small"
+                sx={{
+                  bgcolor: "rgba(0,0,0,0.06)",
+                  color: "text.secondary",
+                  fontWeight: 600,
+                  fontSize: "0.75rem",
+                  px: 1,
+                }}
+              />
+            </Box>
+          )}
+
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: isMine ? "flex-end" : "flex-start",
+              mb: 1,
+              px: 3,
+            }}
+          >
+            <Box
+              sx={{
+                maxWidth: "70%",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: isMine ? "flex-end" : "flex-start",
+              }}
+            >
+              <Paper
+                elevation={0}
+                sx={{
+                  px: 2,
+                  py: 1.5,
+                  borderRadius: isMine
+                    ? "18px 18px 4px 18px"
+                    : "18px 18px 18px 4px",
+                  background: isMine
+                    ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                    : "white",
+                  color: isMine ? "white" : "text.primary",
+                  wordBreak: "break-word",
+                  boxShadow: isMine
+                    ? "0 4px 12px rgba(102, 126, 234, 0.3)"
+                    : "0 2px 8px rgba(0,0,0,0.08)",
+                }}
+              >
+                <Typography
+                  variant="body1"
+                  sx={{ lineHeight: 1.6, fontSize: "0.95rem" }}
+                >
+                  {msg.message || msg.message_text}
+                </Typography>
+                <Box
+                  sx={{
+                    mt: 0.5,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "flex-end",
+                    gap: 0.5,
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: isMine
+                        ? "rgba(255,255,255,0.8)"
+                        : "text.secondary",
+                      fontSize: "0.7rem",
+                    }}
+                  >
+                    {formatTime(msg.createdAt)}
+                  </Typography>
+                  {getMessageStatusIcon(msg)}
+                </Box>
+              </Paper>
+            </Box>
+          </Box>
+        </Box>
+      );
+    },
+    [messages, currentUser?.id, firstItemIndex],
+  );
 
   if (!selectedChat) {
     return (
@@ -206,7 +406,6 @@ export default function ChatArea({
         bgcolor: "#fafbfc",
       }}
     >
-      {/* ── Header ── */}
       <Paper
         elevation={0}
         sx={{
@@ -292,21 +491,10 @@ export default function ChatArea({
         </Menu>
       </Paper>
 
-      {/* ── Messages Area ── */}
       <Box
         sx={{
           flex: 1,
-          overflowY: "auto",
-          p: 3,
-          display: "flex",
-          flexDirection: "column",
-          gap: 0.5,
-          "&::-webkit-scrollbar": { width: "8px" },
-          "&::-webkit-scrollbar-thumb": {
-            bgcolor: "rgba(0,0,0,0.2)",
-            borderRadius: "4px",
-            "&:hover": { bgcolor: "rgba(0,0,0,0.3)" },
-          },
+          position: "relative",
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23e5e7eb' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
         }}
       >
@@ -340,107 +528,27 @@ export default function ChatArea({
             </Typography>
           </Box>
         ) : (
-          messages.map((msg, index) => {
-            const isMine =
-              String(msg.sender_id || msg.sender_user_id) ===
-              String(currentUser?.id);
-            const showDateSeparator = shouldShowDateSeparator(
-              msg,
-              messages[index - 1],
-            );
-
-            return (
-              <Box key={msg.id || index}>
-                {showDateSeparator && (
-                  <Box
-                    sx={{ display: "flex", justifyContent: "center", my: 3 }}
-                  >
-                    <Chip
-                      label={formatDate(msg.createdAt)}
-                      size="small"
-                      sx={{
-                        bgcolor: "rgba(0,0,0,0.06)",
-                        color: "text.secondary",
-                        fontWeight: 600,
-                        fontSize: "0.75rem",
-                        px: 1,
-                      }}
-                    />
-                  </Box>
-                )}
-
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: isMine ? "flex-end" : "flex-start",
-                    mb: 1,
-                  }}
-                >
-                  <Box
-                    sx={{
-                      maxWidth: "70%",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: isMine ? "flex-end" : "flex-start",
-                    }}
-                  >
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        px: 2,
-                        py: 1.5,
-                        borderRadius: isMine
-                          ? "18px 18px 4px 18px"
-                          : "18px 18px 18px 4px",
-                        background: isMine
-                          ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-                          : "white",
-                        color: isMine ? "white" : "text.primary",
-                        wordBreak: "break-word",
-                        boxShadow: isMine
-                          ? "0 4px 12px rgba(102, 126, 234, 0.3)"
-                          : "0 2px 8px rgba(0,0,0,0.08)",
-                      }}
-                    >
-                      <Typography
-                        variant="body1"
-                        sx={{ lineHeight: 1.6, fontSize: "0.95rem" }}
-                      >
-                        {msg.message || msg.message_text}
-                      </Typography>
-                      <Box
-                        sx={{
-                          mt: 0.5,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "flex-end",
-                          gap: 0.5,
-                        }}
-                      >
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            color: isMine
-                              ? "rgba(255,255,255,0.8)"
-                              : "text.secondary",
-                            fontSize: "0.7rem",
-                          }}
-                        >
-                          {formatTime(msg.createdAt)}
-                        </Typography>
-                        {getMessageStatusIcon(msg)}
-                      </Box>
-                    </Paper>
-                  </Box>
-                </Box>
-              </Box>
-            );
-          })
+          <Virtuoso
+            ref={virtuosoRef}
+            data={messages}
+            firstItemIndex={firstItemIndex}
+            itemContent={itemContent}
+            startReached={loadMore}
+            components={{
+              Header,
+            }}
+            alignToBottom
+            atBottomStateChange={setAtBottom}
+            atBottomThreshold={50}
+            initialTopMostItemIndex={messages.length - 1}
+            style={{
+              height: "100%",
+            }}
+            defaultItemHeight={80}
+          />
         )}
-        <div ref={messagesEndRef} />
       </Box>
 
-      {/* ── Input Area ── */}
       <Paper
         elevation={0}
         sx={{

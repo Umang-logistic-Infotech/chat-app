@@ -97,8 +97,6 @@ router.post("/create", async (req, res) => {
       type: "private",
     });
 
-    console.log("✅ Created new conversation with ID:", conversation.id);
-
     // Add both participants
     await ConversationParticipants.bulkCreate([
       {

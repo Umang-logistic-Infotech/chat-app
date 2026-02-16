@@ -15,14 +15,11 @@ export default function useSocket(userId) {
     const socket = io(BACKEND_URL, { transports: ["websocket"] });
     socketRef.current = socket;
 
-    console.log("🔌 Socket connecting for user:", userId);
-
     // Register user
     socket.emit("register", userId);
 
     // Listen for incoming messages
     socket.on("receive_message", (message) => {
-      console.log("📨 Received message:", message);
       setIncomingMessage({ ...message, _timestamp: Date.now() });
       // Automatically emit delivered status
       socket.emit("message_delivered", message.id);
@@ -30,7 +27,6 @@ export default function useSocket(userId) {
 
     // Listen for message delivered status
     socket.on("message_delivered", (data) => {
-      console.log("✅ Message delivered:", data);
       setMessageStatusUpdate({
         messageId: data.messageId || data.id,
         status: "delivered",
@@ -41,7 +37,6 @@ export default function useSocket(userId) {
 
     // Listen for message read status
     socket.on("message_read", (data) => {
-      console.log("👁️ Message read:", data);
       setMessageStatusUpdate({
         messageId: data.messageId || data.id,
         status: "read",
@@ -52,7 +47,6 @@ export default function useSocket(userId) {
 
     // Listen for message sent confirmation
     socket.on("message_sent", (data) => {
-      console.log("✅ Message sent confirmation:", data);
       setMessageStatusUpdate({
         messageId: data.messageId || data.id || data.message?.id,
         status: "sent",
@@ -63,7 +57,6 @@ export default function useSocket(userId) {
 
     // Listen for user status changes (online/offline)
     socket.on("user_status_changed", (data) => {
-      console.log("👤 User status changed:", data);
       setUserStatusUpdate({
         user_id: data.user_id,
         status: data.status,
@@ -78,7 +71,6 @@ export default function useSocket(userId) {
     });
 
     return () => {
-      console.log("🔌 Socket disconnecting");
       socket.disconnect();
     };
   }, [userId]);
@@ -86,7 +78,6 @@ export default function useSocket(userId) {
   // Mark message as read
   function markMessageAsRead(messageId) {
     if (socketRef.current) {
-      console.log("👁️ Marking message as read:", messageId);
       socketRef.current.emit("message_read", messageId);
     }
   }
@@ -110,8 +101,6 @@ export default function useSocket(userId) {
         message: options.message || options.text,
       };
 
-      console.log("📤 Sending message:", messageData);
-
       // Emit the message
       socketRef.current.emit("send_message", messageData);
 
@@ -119,7 +108,6 @@ export default function useSocket(userId) {
       let resolved = false;
 
       const onSent = (response) => {
-        console.log("✅ Message sent response received:", response);
         if (!resolved) {
           resolved = true;
           resolve({

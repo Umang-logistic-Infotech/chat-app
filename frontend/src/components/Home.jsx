@@ -31,6 +31,11 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState({});
   const [newChatDialogOpen, setNewChatDialogOpen] = useState(false);
+
+  // Pagination states
+  const [messagesPagination, setMessagesPagination] = useState({});
+  const [loadingOldMessages, setLoadingOldMessages] = useState({});
+
   const baseurl = process.env.REACT_APP_API_URL;
   const {
     sendMessage,
@@ -76,28 +81,122 @@ export default function Home() {
     }
   }, [userStatusUpdate]);
 
-  // ── Fetch messages for a conversation ──
-  async function fetchMessagesForConversation(conversationId) {
+  // ── Fetch messages for a conversation with pagination ──
+  async function fetchMessagesForConversation(
+    conversationId,
+    page = 1,
+    limit = 15,
+  ) {
     if (!conversationId) {
       return;
     }
 
     try {
-      const response = await api.get(`${baseurl}/users/${conversationId}`);
-      setMessages((prev) => ({
-        ...prev,
-        [conversationId]: response.data,
-      }));
+      const response = await api.get(
+        `${baseurl}/users/${conversationId}?page=${page}&limit=${limit}`,
+      );
+
+      // Handle both new format (with pagination) and old format (array only)
+      const newMessages = response.data.messages || response.data;
+      const paginationData = response.data.pagination;
+
+      // If pagination data exists, use it. Otherwise fallback to old logic
+      const hasMore = paginationData
+        ? paginationData.hasMore
+        : newMessages.length === limit;
+
+      const totalMessages = paginationData?.totalMessages || 0;
+
+      setMessages((prev) => {
+        const updated = {
+          ...prev,
+          [conversationId]:
+            page === 1
+              ? newMessages
+              : [...newMessages, ...(prev[conversationId] || [])],
+        };
+        return updated;
+      });
+
+      setMessagesPagination((prev) => {
+        const updated = {
+          ...prev,
+          [conversationId]: {
+            currentPage: page,
+            hasMore: hasMore,
+            totalMessages: totalMessages,
+            totalLoaded:
+              page === 1
+                ? newMessages.length
+                : (prev[conversationId]?.totalLoaded || 0) + newMessages.length,
+          },
+        };
+        return updated;
+      });
+
+      return { messages: newMessages, hasMore };
     } catch (error) {
       console.error("Error fetching messages:", error);
+      return { messages: [], hasMore: false };
     }
   }
+
+  // ── Load older messages (for infinite scroll) ──
+  const loadOlderMessages = async (conversationId) => {
+    if (!conversationId) {
+      return;
+    }
+
+    const currentlyLoading = loadingOldMessages[conversationId];
+
+    if (currentlyLoading) {
+      return;
+    }
+
+    const pagination = messagesPagination[conversationId];
+    const currentMessages = messages[conversationId] || [];
+    if (pagination && !pagination.hasMore) {
+      return;
+    }
+
+    const nextPage = pagination ? pagination.currentPage + 1 : 2;
+
+    setLoadingOldMessages((prev) => {
+      return { ...prev, [conversationId]: true };
+    });
+
+    try {
+      const result = await fetchMessagesForConversation(
+        conversationId,
+        nextPage,
+        15,
+      );
+
+      // Extra safety: if we got 0 messages, force hasMore to false
+      if (result && result.messages.length === 0) {
+        setMessagesPagination((prev) => ({
+          ...prev,
+          [conversationId]: {
+            ...prev[conversationId],
+            hasMore: false,
+          },
+        }));
+      }
+    } catch (error) {
+      console.error("❌ Error loading older messages:", error);
+    } finally {
+      setLoadingOldMessages((prev) => {
+        return { ...prev, [conversationId]: false };
+      });
+    }
+  };
 
   // ── Load messages when a chat is selected ──
   useEffect(() => {
     if (selectedChat?.conversationId) {
       if (!messages[selectedChat.conversationId]) {
-        fetchMessagesForConversation(selectedChat.conversationId);
+        fetchMessagesForConversation(selectedChat.conversationId, 1, 15);
+      } else {
       }
 
       const chatMessages = messages[selectedChat.conversationId] || [];
@@ -227,8 +326,6 @@ export default function Home() {
     // Use conversationId if it exists, otherwise use temp key based on receiver ID
     const messageKey = selectedChat.conversationId;
 
-    console.log("📤 Sending message with key:", messageKey);
-
     setMessages((prev) => ({
       ...prev,
       [messageKey]: [...(prev[messageKey] || []), newMessage],
@@ -236,8 +333,6 @@ export default function Home() {
 
     sendMessage({ conversationId: selectedChat.conversationId, message: text })
       .then((response) => {
-        console.log("✅ Send message response:", response);
-
         setMessages((prev) => {
           const conversationMessages = prev[messageKey] || [];
           return {
@@ -257,11 +352,6 @@ export default function Home() {
 
         // If this is a new conversation, migrate messages to the new conversationId
         if (!selectedChat.conversationId && response.conversationId) {
-          console.log(
-            "🆕 Setting up new conversation with ID:",
-            response.conversationId,
-          );
-
           setMessages((prev) => {
             const oldMessages = prev[messageKey] || [];
             const updatedMessages = { ...prev };
@@ -633,6 +723,17 @@ export default function Home() {
         messages={currentMessages}
         onSend={handleSend}
         isOnline={onlineUsers[selectedChat?.id]?.status === "online"}
+        onLoadOlderMessages={loadOlderMessages}
+        isLoadingOldMessages={
+          selectedChat?.conversationId
+            ? loadingOldMessages[selectedChat.conversationId]
+            : false
+        }
+        hasMoreMessages={
+          selectedChat?.conversationId
+            ? (messagesPagination[selectedChat.conversationId]?.hasMore ?? true)
+            : false
+        }
       />
 
       {/* ── New Chat Dialog ── */}
