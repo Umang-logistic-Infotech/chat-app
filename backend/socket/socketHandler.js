@@ -9,7 +9,8 @@ import { Op } from "sequelize";
 
 export default function setupSocketHandlers(io) {
   io.on("connection", (socket) => {
-    // User registers their socket connection
+    console.log("✅ New socket connection:", socket.id);
+
     socket.on("register", async (userId) => {
       try {
         await ActiveUsers.upsert({
@@ -18,6 +19,8 @@ export default function setupSocketHandlers(io) {
           socket_id: socket.id,
           last_seen: new Date(),
         });
+
+        console.log(`✅ User ${userId} registered with socket ${socket.id}`);
 
         io.emit("user_status_changed", {
           user_id: userId,
@@ -28,11 +31,16 @@ export default function setupSocketHandlers(io) {
       }
     });
 
-    // ─── SEND MESSAGE TO CONVERSATION ────────────────────────────────
     socket.on(
       "send_message",
       async ({ senderUserId, conversationId, message }) => {
         try {
+          console.log("📨 Sending message:", {
+            senderUserId,
+            conversationId,
+            message,
+          });
+
           if (!conversationId) {
             return socket.emit("error_message", "Conversation ID is required");
           }
@@ -45,14 +53,12 @@ export default function setupSocketHandlers(io) {
             return socket.emit("error_message", "Message is required");
           }
 
-          // Find the conversation
           const conversation = await Conversations.findByPk(conversationId);
 
           if (!conversation) {
             return socket.emit("error_message", "Conversation not found");
           }
 
-          // Verify sender is a participant in this conversation
           const isParticipant = await ConversationParticipants.findOne({
             where: {
               conversation_id: conversationId,
@@ -67,7 +73,6 @@ export default function setupSocketHandlers(io) {
             );
           }
 
-          // Create the message
           const savedMessage = await Messages.create({
             sender_id: senderUserId,
             message,
@@ -75,28 +80,40 @@ export default function setupSocketHandlers(io) {
             status: "sent",
           });
 
-          // Emit confirmation to sender
+          const sender = await Users.findByPk(senderUserId, {
+            attributes: ["id", "name", "profile_photo"],
+          });
+
+          const messageData = {
+            id: savedMessage.id,
+            sender_id: senderUserId,
+            sender_name: sender.name,
+            sender_photo: sender.profile_photo,
+            message: savedMessage.message,
+            conversation_id: conversationId,
+            createdAt: savedMessage.createdAt,
+            status: "sent",
+            type: conversation.type,
+          };
+
           socket.emit("message_sent", {
             messageId: savedMessage.id,
             conversationId: conversationId,
-            message: savedMessage,
+            message: messageData,
           });
 
-          // Get all participants in this conversation (except the sender)
           const participants = await ConversationParticipants.findAll({
             where: {
               conversation_id: conversationId,
-              user_id: { [Op.ne]: senderUserId }, // Exclude sender
+              user_id: { [Op.ne]: senderUserId },
             },
           });
 
           let deliveredToAtLeastOne = false;
 
-          // Send message to all online participants
           for (const participant of participants) {
             const receiverUserId = participant.user_id;
 
-            // Get participant's online status
             const receiverStatus = await ActiveUsers.findOne({
               where: { user_id: receiverUserId },
             });
@@ -107,13 +124,13 @@ export default function setupSocketHandlers(io) {
             ) {
               deliveredToAtLeastOne = true;
 
+              console.log(
+                `📤 Sending to user ${receiverUserId} on socket ${receiverStatus.socket_id}`,
+              );
+
               io.to(receiverStatus.socket_id).emit("receive_message", {
-                id: savedMessage.id,
-                sender_id: senderUserId,
+                ...messageData,
                 receiver_id: receiverUserId,
-                message: savedMessage.message,
-                conversation_id: conversationId,
-                createdAt: savedMessage.createdAt,
                 status: "delivered",
               });
             } else {
@@ -121,13 +138,13 @@ export default function setupSocketHandlers(io) {
             }
           }
 
-          // Update message status to delivered if at least one participant received it
           if (deliveredToAtLeastOne) {
             await savedMessage.update({ status: "delivered" });
 
-            socket.emit("message_delivered", {
+            socket.emit("message_status_update", {
               messageId: savedMessage.id,
               conversationId: conversationId,
+              status: "delivered",
             });
           } else {
             console.log(
@@ -141,11 +158,10 @@ export default function setupSocketHandlers(io) {
       },
     );
 
-    // ─── MESSAGE DELIVERED ──────────────────────────────────────
     socket.on("message_delivered", async (messageId) => {
       try {
         const message = await Messages.findByPk(messageId);
-        if (message) {
+        if (message && message.status !== "read") {
           await message.update({ status: "delivered" });
 
           const senderStatus = await ActiveUsers.findOne({
@@ -153,9 +169,10 @@ export default function setupSocketHandlers(io) {
           });
 
           if (senderStatus?.socket_id) {
-            io.to(senderStatus.socket_id).emit("message_delivered", {
+            io.to(senderStatus.socket_id).emit("message_status_update", {
               messageId: message.id,
               conversationId: message.conversation_id,
+              status: "delivered",
             });
           }
         }
@@ -164,7 +181,6 @@ export default function setupSocketHandlers(io) {
       }
     });
 
-    // ─── MESSAGE READ ───────────────────────────────────────────
     socket.on("message_read", async (messageId) => {
       try {
         const message = await Messages.findByPk(messageId);
@@ -176,9 +192,10 @@ export default function setupSocketHandlers(io) {
           });
 
           if (senderStatus?.socket_id) {
-            io.to(senderStatus.socket_id).emit("message_read", {
+            io.to(senderStatus.socket_id).emit("message_status_update", {
               messageId: message.id,
               conversationId: message.conversation_id,
+              status: "read",
             });
           }
         }
@@ -187,9 +204,65 @@ export default function setupSocketHandlers(io) {
       }
     });
 
-    // ─── DISCONNECT ─────────────────────────────────────────────
+    socket.on("typing_start", async ({ conversationId, userId, userName }) => {
+      try {
+        const participants = await ConversationParticipants.findAll({
+          where: {
+            conversation_id: conversationId,
+            user_id: { [Op.ne]: userId },
+          },
+        });
+
+        for (const participant of participants) {
+          const receiverStatus = await ActiveUsers.findOne({
+            where: { user_id: participant.user_id },
+          });
+
+          if (receiverStatus?.status === "online" && receiverStatus.socket_id) {
+            io.to(receiverStatus.socket_id).emit("user_typing", {
+              conversationId,
+              userId,
+              userName,
+              isTyping: true,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("❌ typing_start error:", err);
+      }
+    });
+
+    socket.on("typing_stop", async ({ conversationId, userId }) => {
+      try {
+        const participants = await ConversationParticipants.findAll({
+          where: {
+            conversation_id: conversationId,
+            user_id: { [Op.ne]: userId },
+          },
+        });
+
+        for (const participant of participants) {
+          const receiverStatus = await ActiveUsers.findOne({
+            where: { user_id: participant.user_id },
+          });
+
+          if (receiverStatus?.status === "online" && receiverStatus.socket_id) {
+            io.to(receiverStatus.socket_id).emit("user_typing", {
+              conversationId,
+              userId,
+              isTyping: false,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("❌ typing_stop error:", err);
+      }
+    });
+
     socket.on("disconnect", async () => {
       try {
+        console.log("❌ Socket disconnected:", socket.id);
+
         const activeUser = await ActiveUsers.findOne({
           where: { socket_id: socket.id },
         });
@@ -206,6 +279,8 @@ export default function setupSocketHandlers(io) {
             status: "offline",
             last_seen: activeUser.last_seen,
           });
+
+          console.log(`✅ User ${activeUser.user_id} marked as offline`);
         }
       } catch (error) {
         console.error("❌ Error updating user status on disconnect:", error);

@@ -88,7 +88,7 @@ router.get("/test/:id", async (req, res) => {
           include: [
             {
               model: ConversationParticipants,
-              as: "participantsList",
+              as: "participants",
               where: { user_id: { [Op.ne]: currentUserId } },
               include: [
                 {
@@ -106,7 +106,7 @@ router.get("/test/:id", async (req, res) => {
     // Create a map of userId -> conversationId for quick lookup
     const conversationMap = {};
     userParticipations.forEach((participation) => {
-      const otherParticipant = participation.conversation.participantsList[0];
+      const otherParticipant = participation.conversation.participants[0];
       if (otherParticipant) {
         conversationMap[otherParticipant.user_id] =
           participation.conversation_id;
@@ -173,6 +173,7 @@ router.get("/:conversationId", async (req, res) => {
         totalPages: totalPages,
         hasMore: hasMore,
       },
+      type: conversation.type,
     });
   } catch (err) {
     console.error("Error fetching messages:", err);
@@ -183,97 +184,94 @@ router.get("/:conversationId", async (req, res) => {
 // Get all conversations for a user (both private and group)
 router.get("/conversations/:userId", async (req, res) => {
   try {
-    const userId = parseInt(req.params.userId);
+    const { userId } = req.params;
 
-    if (isNaN(userId)) {
-      return res.status(400).json({ error: "Invalid user ID" });
-    }
-
-    const conversations = await Conversations.findAll({
+    const conversations = await ConversationParticipants.findAll({
+      where: { user_id: userId },
       include: [
         {
-          model: ConversationParticipants,
-          as: "participantsList",
-          where: { user_id: userId },
-          attributes: ["role", "joined_at"],
-        },
-        {
-          model: Users,
-          as: "participants",
-          attributes: ["id", "name", "profile_photo", "phone_number"],
-          through: { attributes: [] },
-        },
-        {
-          model: Messages,
-          as: "messages",
-          limit: 1,
-          order: [["createdAt", "DESC"]],
-          required: false,
+          model: Conversations,
+          as: "conversation",
           include: [
             {
+              model: ConversationParticipants,
+              as: "participants",
+              include: [
+                {
+                  model: Users,
+                  as: "user",
+                  attributes: ["id", "name", "profile_photo", "phone_number"],
+                },
+              ],
+            },
+            {
               model: Users,
-              as: "sender",
-              attributes: ["id", "name"],
+              as: "creator",
+              attributes: ["id", "name", "profile_photo"],
             },
           ],
         },
-        {
-          model: Users,
-          as: "creator",
-          attributes: ["id", "name"],
-          required: false,
-        },
       ],
-      order: [["updatedAt", "DESC"]],
+      order: [["conversation", "updatedAt", "DESC"]],
     });
-    if (!conversations) {
-      return res.status(404).message("No Conversations Found");
-    }
 
-    // Format response
-    const formattedConversations = conversations.map((conv) => {
-      const convData = conv.toJSON();
+    const formattedConversations = conversations
+      .map((cp) => {
+        const conv = cp.conversation;
 
-      // For private chats, get the other participant
-      if (conv.type === "private") {
-        const otherParticipant = convData.participants.find(
-          (p) => p.id !== userId,
-        );
-        return {
-          id: conv.id,
-          type: "private",
-          conversationId: conv.id,
-          name: otherParticipant?.name,
-          profile_photo: otherParticipant?.profile_photo,
-          phone_number: otherParticipant?.phone_number,
-          lastMessage: convData.messages[0] || null,
-          participantCount: convData.participants.length,
-          myRole: convData.participantsList[0]?.role,
-        };
-      } else {
-        // Group chat
-        return {
-          id: conv.id,
-          type: "group",
-          conversationId: conv.id,
-          name: conv.name,
-          group_photo: conv.group_photo,
-          description: conv.description,
-          lastMessage: convData.messages[0] || null,
-          participantCount: convData.participants.length,
-          myRole: convData.participantsList[0]?.role,
-          createdBy: convData.creator,
-        };
-      }
-    });
+        if (!conv) return null;
+
+        if (conv.type === "group") {
+          return {
+            id: conv.id,
+            conversationId: conv.id,
+            type: "group",
+            name: conv.name,
+            group_photo: conv.group_photo,
+            description: conv.description,
+            created_by: conv.created_by,
+            creator: conv.creator
+              ? {
+                  id: conv.creator.id,
+                  name: conv.creator.name,
+                  profile_photo: conv.creator.profile_photo,
+                }
+              : null,
+            participants: conv.participants.map((p) => ({
+              id: p.user.id,
+              name: p.user.name,
+              profile_photo: p.user.profile_photo,
+              role: p.role,
+            })),
+            participantCount: conv.participants.length,
+            updatedAt: conv.updatedAt,
+          };
+        } else {
+          const otherUser = conv.participants.find(
+            (p) => p.user_id !== parseInt(userId),
+          )?.user;
+
+          if (!otherUser) return null;
+
+          return {
+            id: otherUser.id,
+            conversationId: conv.id,
+            type: "private",
+            name: otherUser.name,
+            profile_photo: otherUser.profile_photo,
+            phone_number: otherUser.phone_number,
+            updatedAt: conv.updatedAt,
+          };
+        }
+      })
+      .filter((conv) => conv !== null);
 
     res.json(formattedConversations);
-  } catch (err) {
-    console.error("Error fetching conversations:", err);
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    console.error("Error fetching conversations:", error);
+    res.status(500).json({ error: error.message });
   }
 });
-
 // Get conversation details by ID
 router.get("/conversation/:conversationId", async (req, res) => {
   try {

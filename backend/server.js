@@ -9,8 +9,10 @@ import verifyJWTToken from "./middleware/verifyJwt.js";
 import setupSocketHandlers from "./socket/socketHandler.js";
 
 import "./config/db.js";
+import "./Models/index.js";
 import UserRoutes from "./Routes/UserRoutes.js";
 import ConversationRoutes from "./Routes/ConversationRoutes.js";
+import GroupRoutes from "./Routes/GroupRoutes.js";
 import TestRoutes from "./Routes/TestRoutes.js";
 
 const app = express();
@@ -43,6 +45,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use("/users", UserRoutes);
 app.use("/conversations", ConversationRoutes);
+app.use("/conversations/group", GroupRoutes);
 app.use("/test", TestRoutes);
 
 app.get("/", (req, res) => {

@@ -3,6 +3,7 @@ import {
   Box,
   ListItemText,
   List,
+  Avatar,
   ListItemAvatar,
   Paper,
   InputBase,
@@ -10,9 +11,14 @@ import {
   CircularProgress,
   Chip,
   Fab,
+  Menu,
+  MenuItem,
+  ListItemIcon,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import AddIcon from "@mui/icons-material/Add";
+import GroupAddIcon from "@mui/icons-material/GroupAdd";
+import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import ListItem from "@mui/material/ListItem";
 import { useState, useEffect } from "react";
 import { useUser } from "../context/UserContext";
@@ -20,6 +26,7 @@ import ChatArea from "./ChatArea";
 import useSocket from "../hooks/useSocket";
 import { api } from "../Interceptor/auth";
 import NewChatDialog from "./dialogs/NewChatDialog";
+import CreateGroupDialog from "./dialogs/CreateGroupDialog";
 import UserAvatar from "./common/UserAvatar";
 
 export default function Home() {
@@ -31,8 +38,9 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState({});
   const [newChatDialogOpen, setNewChatDialogOpen] = useState(false);
+  const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
+  const [fabMenuAnchor, setFabMenuAnchor] = useState(null);
 
-  // Pagination states
   const [messagesPagination, setMessagesPagination] = useState({});
   const [loadingOldMessages, setLoadingOldMessages] = useState({});
 
@@ -45,13 +53,11 @@ export default function Home() {
     userStatusUpdate,
   } = useSocket(user?.id);
 
-  // ── Fetch users ──
   useEffect(() => {
-    if (user != null) fetchUsers();
-    // eslint-disable-next-line
+    if (user != null) fetchConversations();
   }, [user]);
 
-  async function fetchUsers() {
+  async function fetchConversations() {
     try {
       setLoading(true);
       const response = await api.get(
@@ -59,7 +65,7 @@ export default function Home() {
       );
       setChats(response.data);
     } catch (error) {
-      console.error("Error fetching users:", error);
+      console.error("Error fetching conversations:", error);
       if (error.response?.status === 401) {
         console.error("Authentication failed - Please login again");
       }
@@ -68,7 +74,6 @@ export default function Home() {
     }
   }
 
-  // ── Track online/offline status ──
   useEffect(() => {
     if (userStatusUpdate) {
       setOnlineUsers((prev) => ({
@@ -81,7 +86,6 @@ export default function Home() {
     }
   }, [userStatusUpdate]);
 
-  // ── Fetch messages for a conversation with pagination ──
   async function fetchMessagesForConversation(
     conversationId,
     page = 1,
@@ -96,43 +100,35 @@ export default function Home() {
         `${baseurl}/users/${conversationId}?page=${page}&limit=${limit}`,
       );
 
-      // Handle both new format (with pagination) and old format (array only)
       const newMessages = response.data.messages || response.data;
       const paginationData = response.data.pagination;
 
-      // If pagination data exists, use it. Otherwise fallback to old logic
       const hasMore = paginationData
         ? paginationData.hasMore
         : newMessages.length === limit;
 
       const totalMessages = paginationData?.totalMessages || 0;
 
-      setMessages((prev) => {
-        const updated = {
-          ...prev,
-          [conversationId]:
-            page === 1
-              ? newMessages
-              : [...newMessages, ...(prev[conversationId] || [])],
-        };
-        return updated;
-      });
+      setMessages((prev) => ({
+        ...prev,
+        [conversationId]:
+          page === 1
+            ? newMessages
+            : [...newMessages, ...(prev[conversationId] || [])],
+      }));
 
-      setMessagesPagination((prev) => {
-        const updated = {
-          ...prev,
-          [conversationId]: {
-            currentPage: page,
-            hasMore: hasMore,
-            totalMessages: totalMessages,
-            totalLoaded:
-              page === 1
-                ? newMessages.length
-                : (prev[conversationId]?.totalLoaded || 0) + newMessages.length,
-          },
-        };
-        return updated;
-      });
+      setMessagesPagination((prev) => ({
+        ...prev,
+        [conversationId]: {
+          currentPage: page,
+          hasMore: hasMore,
+          totalMessages: totalMessages,
+          totalLoaded:
+            page === 1
+              ? newMessages.length
+              : (prev[conversationId]?.totalLoaded || 0) + newMessages.length,
+        },
+      }));
 
       return { messages: newMessages, hasMore };
     } catch (error) {
@@ -141,29 +137,24 @@ export default function Home() {
     }
   }
 
-  // ── Load older messages (for infinite scroll) ──
   const loadOlderMessages = async (conversationId) => {
     if (!conversationId) {
       return;
     }
 
-    const currentlyLoading = loadingOldMessages[conversationId];
-
-    if (currentlyLoading) {
+    if (loadingOldMessages[conversationId]) {
       return;
     }
 
     const pagination = messagesPagination[conversationId];
-    const currentMessages = messages[conversationId] || [];
+
     if (pagination && !pagination.hasMore) {
       return;
     }
 
     const nextPage = pagination ? pagination.currentPage + 1 : 2;
 
-    setLoadingOldMessages((prev) => {
-      return { ...prev, [conversationId]: true };
-    });
+    setLoadingOldMessages((prev) => ({ ...prev, [conversationId]: true }));
 
     try {
       const result = await fetchMessagesForConversation(
@@ -172,7 +163,6 @@ export default function Home() {
         15,
       );
 
-      // Extra safety: if we got 0 messages, force hasMore to false
       if (result && result.messages.length === 0) {
         setMessagesPagination((prev) => ({
           ...prev,
@@ -183,20 +173,16 @@ export default function Home() {
         }));
       }
     } catch (error) {
-      console.error("❌ Error loading older messages:", error);
+      console.error("Error loading older messages:", error);
     } finally {
-      setLoadingOldMessages((prev) => {
-        return { ...prev, [conversationId]: false };
-      });
+      setLoadingOldMessages((prev) => ({ ...prev, [conversationId]: false }));
     }
   };
 
-  // ── Load messages when a chat is selected ──
   useEffect(() => {
     if (selectedChat?.conversationId) {
       if (!messages[selectedChat.conversationId]) {
         fetchMessagesForConversation(selectedChat.conversationId, 1, 15);
-      } else {
       }
 
       const chatMessages = messages[selectedChat.conversationId] || [];
@@ -206,10 +192,8 @@ export default function Home() {
         }
       });
     }
-    // eslint-disable-next-line
   }, [selectedChat]);
 
-  // ── Listen for incoming messages from socket ──
   useEffect(() => {
     if (!incomingMessage) return;
 
@@ -227,30 +211,15 @@ export default function Home() {
     if (conversationId) {
       setChats((prevChats) =>
         prevChats.map((chat) => {
-          if (
-            (chat.id === incomingMessage.sender_id ||
-              chat.id === incomingMessage.receiver_id) &&
-            !chat.conversationId
-          ) {
-            return { ...chat, conversationId };
+          if (chat.conversationId === conversationId) {
+            return { ...chat, updatedAt: new Date() };
           }
           return chat;
         }),
       );
-
-      if (selectedChat && !selectedChat.conversationId) {
-        if (
-          selectedChat.id === incomingMessage.sender_id ||
-          selectedChat.id === incomingMessage.receiver_id
-        ) {
-          setSelectedChat({ ...selectedChat, conversationId });
-        }
-      }
     }
-    // eslint-disable-next-line
   }, [incomingMessage]);
 
-  // ── Listen for message status updates ──
   useEffect(() => {
     if (!messageStatusUpdate) return;
 
@@ -288,7 +257,6 @@ export default function Home() {
     });
   }, [messageStatusUpdate]);
 
-  // ── Handle new chat creation ──
   const handleChatCreated = (chatData, isNew) => {
     const existingChatIndex = chats.findIndex(
       (chat) => chat.id === chatData.id,
@@ -309,7 +277,25 @@ export default function Home() {
     }
   };
 
-  // ── Send a message ──
+  const handleGroupCreated = (groupData) => {
+    const formattedGroup = {
+      id: groupData.id,
+      conversationId: groupData.id,
+      type: "group",
+      name: groupData.name,
+      group_photo: groupData.group_photo,
+      description: groupData.description,
+      participants: groupData.participants || groupData.allParticipants,
+    };
+
+    setChats((prev) => [formattedGroup, ...prev]);
+    setSelectedChat(formattedGroup);
+    setMessages((prev) => ({
+      ...prev,
+      [groupData.id]: [],
+    }));
+  };
+
   const handleSend = (text) => {
     if (!text || !selectedChat) return;
 
@@ -323,7 +309,6 @@ export default function Home() {
       status: "sending",
     };
 
-    // Use conversationId if it exists, otherwise use temp key based on receiver ID
     const messageKey = selectedChat.conversationId;
 
     setMessages((prev) => ({
@@ -350,13 +335,11 @@ export default function Home() {
           };
         });
 
-        // If this is a new conversation, migrate messages to the new conversationId
         if (!selectedChat.conversationId && response.conversationId) {
           setMessages((prev) => {
             const oldMessages = prev[messageKey] || [];
             const updatedMessages = { ...prev };
 
-            // Add messages under new conversationId
             updatedMessages[response.conversationId] = oldMessages.map(
               (msg) => ({
                 ...msg,
@@ -364,7 +347,6 @@ export default function Home() {
               }),
             );
 
-            // Remove old temp key entry
             if (messageKey !== response.conversationId) {
               delete updatedMessages[messageKey];
             }
@@ -372,7 +354,6 @@ export default function Home() {
             return updatedMessages;
           });
 
-          // Update chat list with conversationId
           setChats((prevChats) =>
             prevChats.map((chat) =>
               chat.id === selectedChat.id
@@ -381,7 +362,6 @@ export default function Home() {
             ),
           );
 
-          // Update selected chat with conversationId
           setSelectedChat((prev) => ({
             ...prev,
             conversationId: response.conversationId,
@@ -389,7 +369,7 @@ export default function Home() {
         }
       })
       .catch((error) => {
-        console.error("❌ Failed to send message:", error);
+        console.error("Failed to send message:", error);
         setMessages((prev) => ({
           ...prev,
           [messageKey]:
@@ -401,15 +381,13 @@ export default function Home() {
   };
 
   const getLastMessage = (chat) => {
-    const chatMessages =
-      messages[chat.conversationId] || messages[`temp_${chat.id}`] || [];
+    const chatMessages = messages[chat.conversationId] || [];
     if (chatMessages.length === 0) return null;
     return chatMessages[chatMessages.length - 1];
   };
 
   const getUnreadCount = (chat) => {
-    const chatMessages =
-      messages[chat.conversationId] || messages[`temp_${chat.id}`] || [];
+    const chatMessages = messages[chat.conversationId] || [];
     return chatMessages.filter(
       (msg) => msg.sender_id !== user.id && msg.status !== "read",
     ).length;
@@ -417,7 +395,7 @@ export default function Home() {
 
   const currentMessages = selectedChat?.conversationId
     ? messages[selectedChat.conversationId] || []
-    : messages[`temp_${selectedChat?.id}`] || [];
+    : [];
 
   const filteredChats = chats.filter((chat) =>
     chat.name.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -447,11 +425,28 @@ export default function Home() {
     }
   };
 
+  const getGroupAvatar = (chat) => {
+    if (chat.group_photo) {
+      return <Avatar src={chat.group_photo} sx={{ width: 52, height: 52 }} />;
+    }
+    return (
+      <Avatar
+        sx={{
+          width: 52,
+          height: 52,
+          bgcolor: "primary.main",
+          fontSize: "1.2rem",
+        }}
+      >
+        {chat.name?.charAt(0).toUpperCase()}
+      </Avatar>
+    );
+  };
+
   return (
     <Box
       sx={{ display: "flex", height: "calc(100vh - 64px)", bgcolor: "#f5f7fa" }}
     >
-      {/* ── Sidebar ── */}
       <Paper
         elevation={0}
         sx={{
@@ -466,7 +461,6 @@ export default function Home() {
           position: "relative",
         }}
       >
-        {/* Sidebar Header */}
         <Box
           sx={{
             px: 3,
@@ -489,7 +483,6 @@ export default function Home() {
             </Typography>
           </Box>
 
-          {/* Search Bar */}
           <Paper
             elevation={0}
             sx={{
@@ -520,7 +513,6 @@ export default function Home() {
           </Paper>
         </Box>
 
-        {/* Chat List */}
         <List
           sx={{
             flex: 1,
@@ -577,19 +569,24 @@ export default function Home() {
                 align="center"
                 fontWeight={500}
               >
-                {searchQuery ? "No conversations found" : "No users available"}
+                {searchQuery
+                  ? "No conversations found"
+                  : "No conversations yet"}
               </Typography>
             </Box>
           ) : (
             filteredChats.map((chat) => {
-              const isSelected = selectedChat?.id === chat.id;
+              const isSelected =
+                selectedChat?.conversationId === chat.conversationId;
               const lastMessage = getLastMessage(chat);
               const unreadCount = getUnreadCount(chat);
-              const isOnline = onlineUsers[chat.id]?.status === "online";
+              const isGroup = chat.type === "group";
+              const isOnline =
+                !isGroup && onlineUsers[chat.id]?.status === "online";
 
               return (
                 <ListItem
-                  key={chat.id}
+                  key={chat.conversationId}
                   button
                   onClick={() => setSelectedChat(chat)}
                   sx={{
@@ -605,12 +602,16 @@ export default function Home() {
                   }}
                 >
                   <ListItemAvatar>
-                    <UserAvatar
-                      user={chat}
-                      size={52}
-                      showOnlineBadge={true}
-                      isOnline={isOnline}
-                    />
+                    {isGroup ? (
+                      getGroupAvatar(chat)
+                    ) : (
+                      <UserAvatar
+                        user={chat}
+                        size={52}
+                        showOnlineBadge={true}
+                        isOnline={isOnline}
+                      />
+                    )}
                   </ListItemAvatar>
 
                   <ListItemText
@@ -632,6 +633,17 @@ export default function Home() {
                           sx={{ maxWidth: "180px" }}
                         >
                           {chat.name}
+                          {isGroup && (
+                            <Chip
+                              label={`${chat.participants?.length || chat.participantCount || 0}`}
+                              size="small"
+                              sx={{
+                                ml: 1,
+                                height: 18,
+                                fontSize: "0.65rem",
+                              }}
+                            />
+                          )}
                         </Typography>
                         {lastMessage && (
                           <Typography
@@ -670,7 +682,9 @@ export default function Home() {
                         >
                           {lastMessage
                             ? lastMessage.message
-                            : "No messages yet"}
+                            : isGroup
+                              ? "Group created"
+                              : "No messages yet"}
                         </Typography>
                         {unreadCount > 0 && (
                           <Chip
@@ -696,10 +710,9 @@ export default function Home() {
           )}
         </List>
 
-        {/* Floating Action Button */}
         <Fab
           color="primary"
-          onClick={() => setNewChatDialogOpen(true)}
+          onClick={(e) => setFabMenuAnchor(e.currentTarget)}
           sx={{
             position: "absolute",
             bottom: 24,
@@ -712,9 +725,45 @@ export default function Home() {
         >
           <AddIcon />
         </Fab>
+
+        <Menu
+          anchorEl={fabMenuAnchor}
+          open={Boolean(fabMenuAnchor)}
+          onClose={() => setFabMenuAnchor(null)}
+          anchorOrigin={{
+            vertical: "top",
+            horizontal: "left",
+          }}
+          transformOrigin={{
+            vertical: "bottom",
+            horizontal: "right",
+          }}
+        >
+          <MenuItem
+            onClick={() => {
+              setFabMenuAnchor(null);
+              setNewChatDialogOpen(true);
+            }}
+          >
+            <ListItemIcon>
+              <PersonAddIcon fontSize="small" />
+            </ListItemIcon>
+            <Typography>New Chat</Typography>
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              setFabMenuAnchor(null);
+              setCreateGroupDialogOpen(true);
+            }}
+          >
+            <ListItemIcon>
+              <GroupAddIcon fontSize="small" />
+            </ListItemIcon>
+            <Typography>New Group</Typography>
+          </MenuItem>
+        </Menu>
       </Paper>
 
-      {/* ── Chat Area ── */}
       <ChatArea
         selectedChat={selectedChat}
         conversationId={selectedChat?.conversationId || null}
@@ -722,7 +771,11 @@ export default function Home() {
         currentUser={user}
         messages={currentMessages}
         onSend={handleSend}
-        isOnline={onlineUsers[selectedChat?.id]?.status === "online"}
+        isOnline={
+          selectedChat?.type === "group"
+            ? false
+            : onlineUsers[selectedChat?.id]?.status === "online"
+        }
         onLoadOlderMessages={loadOlderMessages}
         isLoadingOldMessages={
           selectedChat?.conversationId
@@ -736,12 +789,18 @@ export default function Home() {
         }
       />
 
-      {/* ── New Chat Dialog ── */}
       <NewChatDialog
         open={newChatDialogOpen}
         onClose={() => setNewChatDialogOpen(false)}
         currentUserId={user?.id}
         onChatCreated={handleChatCreated}
+      />
+
+      <CreateGroupDialog
+        open={createGroupDialogOpen}
+        onClose={() => setCreateGroupDialogOpen(false)}
+        currentUserId={user?.id}
+        onGroupCreated={handleGroupCreated}
       />
     </Box>
   );

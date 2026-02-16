@@ -21,6 +21,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import NotificationsOffIcon from "@mui/icons-material/NotificationsOff";
 import BlockIcon from "@mui/icons-material/Block";
 import DeleteIcon from "@mui/icons-material/Delete";
+import InfoIcon from "@mui/icons-material/Info";
 import DoneIcon from "@mui/icons-material/Done";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
@@ -48,6 +49,8 @@ export default function ChatArea({
   const isLoadingOldRef = useRef(false);
 
   const START_INDEX = 100000;
+
+  const isGroupChat = selectedChat?.type === "group";
 
   useEffect(() => {
     if (selectedChat?.id) {
@@ -107,6 +110,47 @@ export default function ChatArea({
       prevMessageCountRef.current = messages.length;
     }
   }, [messages, currentUser?.id, atBottom]);
+
+  const getSenderName = (senderId) => {
+    if (!isGroupChat) return null;
+    if (String(senderId) === String(currentUser?.id)) return "You";
+
+    const sender = selectedChat?.participants?.find(
+      (p) => String(p.id) === String(senderId),
+    );
+    return sender?.name || "Unknown";
+  };
+
+  const getSenderColor = (senderId) => {
+    const colors = [
+      "#FF6B6B",
+      "#4ECDC4",
+      "#45B7D1",
+      "#FFA07A",
+      "#98D8C8",
+      "#F7DC6F",
+      "#BB8FCE",
+      "#85C1E2",
+      "#F8B739",
+      "#52B788",
+      "#E63946",
+      "#457B9D",
+    ];
+    const index = senderId % colors.length;
+    return colors[index];
+  };
+
+  const shouldShowSenderName = (currentMsg, previousMsg) => {
+    if (!isGroupChat) return false;
+    if (!currentMsg) return false;
+
+    const isMine = String(currentMsg.sender_id) === String(currentUser?.id);
+    if (isMine) return false;
+
+    if (!previousMsg) return true;
+
+    return String(currentMsg.sender_id) !== String(previousMsg.sender_id);
+  };
 
   const formatTime = (timestamp) => {
     if (!timestamp) return "";
@@ -257,6 +301,9 @@ export default function ChatArea({
       const isMine =
         String(msg.sender_id || msg.sender_user_id) === String(currentUser?.id);
       const showDateSeparator = shouldShowDateSeparator(msg, previousMsg);
+      const showSenderName = shouldShowSenderName(msg, previousMsg);
+      const senderName = getSenderName(msg.sender_id);
+      const senderColor = getSenderColor(msg.sender_id);
 
       return (
         <Box key={msg.id || index}>
@@ -292,6 +339,20 @@ export default function ChatArea({
                 alignItems: isMine ? "flex-end" : "flex-start",
               }}
             >
+              {showSenderName && (
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: senderColor,
+                    fontWeight: 600,
+                    fontSize: "0.75rem",
+                    mb: 0.5,
+                    ml: 1.5,
+                  }}
+                >
+                  {senderName}
+                </Typography>
+              )}
               <Paper
                 elevation={0}
                 sx={{
@@ -344,7 +405,7 @@ export default function ChatArea({
         </Box>
       );
     },
-    [messages, currentUser?.id, firstItemIndex],
+    [messages, currentUser?.id, firstItemIndex, isGroupChat, selectedChat],
   );
 
   if (!selectedChat) {
@@ -421,7 +482,7 @@ export default function ChatArea({
         }}
       >
         <Avatar
-          src={selectedChat.profile_photo || ""}
+          src={selectedChat.group_photo || selectedChat.profile_photo || ""}
           sx={{
             width: 48,
             height: 48,
@@ -430,19 +491,37 @@ export default function ChatArea({
             fontWeight: 600,
           }}
         >
-          {!selectedChat.profile_photo &&
+          {!(selectedChat.group_photo || selectedChat.profile_photo) &&
             selectedChat.name?.charAt(0).toUpperCase()}
         </Avatar>
         <Box sx={{ flex: 1 }}>
           <Typography variant="h6" fontWeight={700} fontSize={16}>
             {selectedChat.name}
+            {isGroupChat && (
+              <Chip
+                label={`${selectedChat.participantCount || selectedChat.participants?.length || 0} members`}
+                size="small"
+                sx={{
+                  ml: 1,
+                  height: 20,
+                  fontSize: "0.7rem",
+                }}
+              />
+            )}
           </Typography>
           <Typography
             variant="caption"
-            color={isOnline ? "success.main" : "text.secondary"}
+            color={isOnline && !isGroupChat ? "success.main" : "text.secondary"}
             fontWeight={500}
           >
-            {isOnline ? "Online" : "Offline"}
+            {isGroupChat
+              ? `${selectedChat.participants
+                  ?.map((p) => p.name)
+                  .slice(0, 3)
+                  .join(", ")}${selectedChat.participantCount > 3 ? "..." : ""}`
+              : isOnline
+                ? "Online"
+                : "Offline"}
           </Typography>
         </Box>
         <Tooltip title="Search">
@@ -467,18 +546,28 @@ export default function ChatArea({
             sx: { width: 200, mt: 1 },
           }}
         >
+          {isGroupChat && (
+            <MenuItem onClick={() => setMenuAnchor(null)}>
+              <ListItemIcon>
+                <InfoIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Group Info</ListItemText>
+            </MenuItem>
+          )}
           <MenuItem onClick={() => setMenuAnchor(null)}>
             <ListItemIcon>
               <NotificationsOffIcon fontSize="small" />
             </ListItemIcon>
             <ListItemText>Mute</ListItemText>
           </MenuItem>
-          <MenuItem onClick={() => setMenuAnchor(null)}>
-            <ListItemIcon>
-              <BlockIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Block</ListItemText>
-          </MenuItem>
+          {!isGroupChat && (
+            <MenuItem onClick={() => setMenuAnchor(null)}>
+              <ListItemIcon>
+                <BlockIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Block</ListItemText>
+            </MenuItem>
+          )}
           <MenuItem
             onClick={() => setMenuAnchor(null)}
             sx={{ color: "error.main" }}
@@ -486,7 +575,9 @@ export default function ChatArea({
             <ListItemIcon>
               <DeleteIcon fontSize="small" color="error" />
             </ListItemIcon>
-            <ListItemText>Delete Chat</ListItemText>
+            <ListItemText>
+              {isGroupChat ? "Leave Group" : "Delete Chat"}
+            </ListItemText>
           </MenuItem>
         </Menu>
       </Paper>
@@ -524,7 +615,9 @@ export default function ChatArea({
               👋
             </Box>
             <Typography variant="body1" color="text.secondary" fontWeight={500}>
-              No messages yet. Start the conversation!
+              {isGroupChat
+                ? "Group created! Say hello to everyone!"
+                : "No messages yet. Start the conversation!"}
             </Typography>
           </Box>
         ) : (
@@ -576,7 +669,7 @@ export default function ChatArea({
           fullWidth
           multiline
           maxRows={4}
-          placeholder="Type a message..."
+          placeholder={isGroupChat ? "Message group..." : "Type a message..."}
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={(e) => {
