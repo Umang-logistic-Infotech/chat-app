@@ -666,7 +666,8 @@ router.put("/:id", upload.single("profile_photo"), async (req, res) => {
     // Store the image URL if file was uploaded
     if (req.file) {
       // Store the URL that the frontend can use to access the image
-      updateData.profile_photo = `${process.env.FRONT_END_URL}/uploads/${req.file.filename}`;
+      updateData.profile_photo = `${process.env.IMAGE_UPLOAD_URL}/uploads/${req.file.filename}`;
+      // updateData.profile_photo = `http://192.168.0.131:5000/uploads/${req.file.filename}`;
     }
 
     const updatedUser = await Users.updateUser(req.params.id, updateData);

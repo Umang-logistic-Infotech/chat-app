@@ -32,7 +32,7 @@ export default function Profile() {
     phone_number: user?.phone_number,
   });
   const [profileImage, setProfileImage] = useState(null);
-  const [imagePreview, setImagePreview] = useState(user?.profile_photo || null);
+  const [imagePreview, setImagePreview] = useState(user?.profile_photo);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);

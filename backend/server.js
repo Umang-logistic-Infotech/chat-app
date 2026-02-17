@@ -24,13 +24,13 @@ const __dirname = path.dirname(__filename);
 // ─── Middleware ───────────────────────────────────────────────
 app.use(
   cors({
-    origin: process.env.FRONT_END_URL,
+    origin: [process.env.FRONT_END_URL_NETWORK, process.env.FRONT_END_URL],
     credentials: true,
   }),
 );
 
 app.use((req, res, next) => {
-  const publicRoutes = ["users/login", "users/register"];
+  const publicRoutes = ["users/login", "users/register", "uploads/"];
 
   if (publicRoutes.some((r) => req.path.includes(r))) {
     return next();
@@ -55,7 +55,7 @@ app.get("/", (req, res) => {
 // ─── Socket.io Setup ────────────────────────────────────────
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONT_END_URL,
+    origin: [process.env.FRONT_END_URL_NETWORK, process.env.FRONT_END_URL],
     credentials: true,
   },
 });
@@ -65,7 +65,7 @@ setupSocketHandlers(io);
 
 // ─── Listen (use httpServer, not app) ─────────────────────────
 const PORT = process.env.PORT;
-// httpServer.listen(PORT, () => {
-httpServer.listen(PORT, "192.168.0.131", () => {
+httpServer.listen(PORT, () => {
+  // httpServer.listen(PORT, "192.168.0.131", () => {
   console.log(`🚀 Server running on port http://192.168.0.131:${PORT}`);
 });

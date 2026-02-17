@@ -8,7 +8,7 @@ export default function UserAvatar({
 }) {
   const AvatarComponent = (
     <Avatar
-      src={user?.profile_photo || ""}
+      src={user?.profile_photo}
       sx={{
         width: size,
         height: size,

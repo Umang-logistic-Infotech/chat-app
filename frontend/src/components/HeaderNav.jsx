@@ -58,7 +58,7 @@ export default function HeaderNav() {
               </Typography>
               <IconButton size="large" onClick={handleMenu} color="inherit">
                 <Avatar
-                  src={user.profile_photo || undefined}
+                  src={user.profile_photo}
                   alt={user.name}
                   sx={{ width: 40, height: 40 }}
                 >

@@ -482,7 +482,7 @@ export default function ChatArea({
         }}
       >
         <Avatar
-          src={selectedChat.group_photo || selectedChat.profile_photo || ""}
+          src={selectedChat.group_photo || selectedChat.profile_photo}
           sx={{
             width: 48,
             height: 48,
