@@ -26,6 +26,8 @@ import CameraAltIcon from "@mui/icons-material/CameraAlt";
 import { useState, useEffect } from "react";
 import { api } from "../../Interceptor/auth";
 
+const BACKEND_URL = process.env.REACT_APP_API_URL;
+
 export default function CreateGroupDialog({
   open,
   onClose,
@@ -42,24 +44,19 @@ export default function CreateGroupDialog({
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  const baseurl = process.env.REACT_APP_API_URL;
-
   useEffect(() => {
-    if (open) {
-      fetchUsers();
-    }
+    if (open) fetchUsers();
   }, [open]);
 
+  // ─── Fetch All Users ────────────────────────────────────────────────────────
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await api.get(`${baseurl}/users/list/${currentUserId}`);
-
-      // Ensure response.data is an array
+      const response = await api.get(
+        `${BACKEND_URL}/users/list/${currentUserId}`,
+      );
       const usersData = Array.isArray(response.data) ? response.data : [];
-      const users = usersData.filter((user) => user.id !== currentUserId);
-
-      setAllUsers(users);
+      setAllUsers(usersData.filter((user) => user.id !== currentUserId));
     } catch (error) {
       console.error("Error fetching users:", error);
       setAllUsers([]);
@@ -68,18 +65,17 @@ export default function CreateGroupDialog({
     }
   };
 
+  // ─── Handle Group Photo Selection ──────────────────────────────────────────
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setGroupPhoto(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setGroupPhotoPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
+    if (!file) return;
+    setGroupPhoto(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setGroupPhotoPreview(reader.result);
+    reader.readAsDataURL(file);
   };
 
+  // ─── Toggle Member Selection ────────────────────────────────────────────────
   const toggleMember = (userId) => {
     setSelectedMembers((prev) =>
       prev.includes(userId)
@@ -88,6 +84,7 @@ export default function CreateGroupDialog({
     );
   };
 
+  // ─── Create Group ───────────────────────────────────────────────────────────
   const handleCreateGroup = async () => {
     if (!groupName.trim() || selectedMembers.length < 2) {
       alert("Please enter a group name and select at least 2 members");
@@ -101,17 +98,20 @@ export default function CreateGroupDialog({
       if (groupPhoto) {
         const formData = new FormData();
         formData.append("file", groupPhoto);
-        const uploadResponse = await api.put(`${baseurl}/upload`, formData);
+        const uploadResponse = await api.put(`${BACKEND_URL}/upload`, formData);
         photoUrl = uploadResponse.data.url;
       }
 
-      const response = await api.post(`${baseurl}/conversations/group/create`, {
-        name: groupName,
-        description: groupDescription,
-        memberIds: [...selectedMembers, currentUserId],
-        createdBy: currentUserId,
-        group_photo: photoUrl,
-      });
+      const response = await api.post(
+        `${BACKEND_URL}/conversations/group/create`,
+        {
+          name: groupName,
+          description: groupDescription,
+          memberIds: [...selectedMembers, currentUserId],
+          createdBy: currentUserId,
+          group_photo: photoUrl,
+        },
+      );
 
       if (response.data.success) {
         onGroupCreated(response.data.group);
@@ -128,6 +128,7 @@ export default function CreateGroupDialog({
     }
   };
 
+  // ─── Reset & Close ──────────────────────────────────────────────────────────
   const handleClose = () => {
     setGroupName("");
     setGroupDescription("");
@@ -138,7 +139,6 @@ export default function CreateGroupDialog({
     onClose();
   };
 
-  // Safe filtering with array check
   const filteredUsers = Array.isArray(allUsers)
     ? allUsers.filter((user) =>
         user?.name?.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -151,13 +151,9 @@ export default function CreateGroupDialog({
       onClose={handleClose}
       maxWidth="sm"
       fullWidth
-      PaperProps={{
-        sx: {
-          borderRadius: "16px",
-          maxHeight: "90vh",
-        },
-      }}
+      PaperProps={{ sx: { borderRadius: "16px", maxHeight: "90vh" } }}
     >
+      {/* Header */}
       <DialogTitle
         sx={{
           display: "flex",
@@ -176,6 +172,7 @@ export default function CreateGroupDialog({
 
       <DialogContent sx={{ pt: 2 }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          {/* Group Photo + Name + Description */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Box sx={{ position: "relative" }}>
               <Avatar
@@ -199,6 +196,7 @@ export default function CreateGroupDialog({
               <label htmlFor="group-photo-upload">
                 <IconButton
                   component="span"
+                  size="small"
                   sx={{
                     position: "absolute",
                     bottom: 0,
@@ -207,7 +205,6 @@ export default function CreateGroupDialog({
                     boxShadow: 1,
                     "&:hover": { bgcolor: "background.paper" },
                   }}
-                  size="small"
                 >
                   <CameraAltIcon fontSize="small" />
                 </IconButton>
@@ -236,11 +233,13 @@ export default function CreateGroupDialog({
             </Box>
           </Box>
 
+          {/* Member Selection */}
           <Box>
             <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
               Add Members ({selectedMembers.length} selected - min 2 required)
             </Typography>
 
+            {/* Member Search */}
             <Paper
               elevation={0}
               sx={{
@@ -262,6 +261,7 @@ export default function CreateGroupDialog({
               />
             </Paper>
 
+            {/* Selected Members Chips */}
             {selectedMembers.length > 0 && (
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
                 {selectedMembers.map((memberId) => {
@@ -283,6 +283,7 @@ export default function CreateGroupDialog({
               </Box>
             )}
 
+            {/* Users List */}
             <List
               sx={{
                 maxHeight: 300,
@@ -293,13 +294,7 @@ export default function CreateGroupDialog({
               }}
             >
               {loading ? (
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "center",
-                    py: 4,
-                  }}
-                >
+                <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
                   <CircularProgress />
                 </Box>
               ) : filteredUsers.length === 0 ? (
@@ -334,6 +329,7 @@ export default function CreateGroupDialog({
         </Box>
       </DialogContent>
 
+      {/* Actions */}
       <DialogActions sx={{ px: 3, pb: 3 }}>
         <Button onClick={handleClose} variant="outlined" disabled={creating}>
           Cancel

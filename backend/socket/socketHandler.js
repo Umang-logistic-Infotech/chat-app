@@ -29,7 +29,13 @@ export default function setupSocketHandlers(io) {
 
     socket.on(
       "send_message",
-      async ({ senderUserId, conversationId, message }) => {
+      async ({
+        senderUserId,
+        conversationId,
+        message,
+        message_type,
+        image_url,
+      }) => {
         try {
           if (!conversationId) {
             return socket.emit("error_message", "Conversation ID is required");
@@ -39,8 +45,13 @@ export default function setupSocketHandlers(io) {
             return socket.emit("error_message", "Sender ID is required");
           }
 
-          if (!message) {
+          // ← Old code was: if (!message) which blocked image messages
+          if (message_type === "text" && !message) {
             return socket.emit("error_message", "Message is required");
+          }
+
+          if (message_type === "image" && !image_url) {
+            return socket.emit("error_message", "Image URL is required");
           }
 
           const conversation = await Conversations.findByPk(conversationId);
@@ -63,9 +74,12 @@ export default function setupSocketHandlers(io) {
             );
           }
 
+          // ← Now saves message_type and image_url too
           const savedMessage = await Messages.create({
             sender_id: senderUserId,
-            message,
+            message: message || null,
+            message_type: message_type || "text",
+            image_url: image_url || null,
             conversation_id: conversationId,
             status: "sent",
           });
@@ -74,12 +88,15 @@ export default function setupSocketHandlers(io) {
             attributes: ["id", "name", "profile_photo"],
           });
 
+          // ← Now includes message_type and image_url in messageData
           const messageData = {
             id: savedMessage.id,
             sender_id: senderUserId,
             sender_name: sender.name,
             sender_photo: sender.profile_photo,
             message: savedMessage.message,
+            message_type: savedMessage.message_type,
+            image_url: savedMessage.image_url,
             conversation_id: conversationId,
             createdAt: savedMessage.createdAt,
             status: "sent",

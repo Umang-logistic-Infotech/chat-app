@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
+import { api } from "../Interceptor/auth";
 
 const BACKEND_URL = process.env.REACT_APP_API_URL;
 
 export default function useSocket(userId) {
   const socketRef = useRef(null);
+
   const [incomingMessage, setIncomingMessage] = useState(null);
   const [messageStatusUpdate, setMessageStatusUpdate] = useState(null);
   const [userStatusUpdate, setUserStatusUpdate] = useState(null);
@@ -86,31 +88,32 @@ export default function useSocket(userId) {
     };
   }, [userId]);
 
-  function markMessageAsRead(messageId) {
-    if (socketRef.current && socketRef.current.connected) {
+  // Mark a message as read
+  const markMessageAsRead = (messageId) => {
+    if (socketRef.current?.connected) {
       socketRef.current.emit("message_read", messageId);
     }
-  }
+  };
 
-  const sendMessage = (options) => {
+  // Send a text message via socket
+  const sendMessage = ({ conversationId, message }) => {
     return new Promise((resolve, reject) => {
-      if (!socketRef.current || !socketRef.current.connected) {
+      if (!socketRef.current?.connected) {
         reject(new Error("Socket not connected"));
         return;
       }
 
-      if (!options.conversationId) {
+      if (!conversationId) {
         reject(new Error("conversationId is required"));
         return;
       }
 
-      const messageData = {
+      socketRef.current.emit("send_message", {
         senderUserId: userId,
-        conversationId: options.conversationId,
-        message: options.message || options.text,
-      };
-
-      socketRef.current.emit("send_message", messageData);
+        conversationId,
+        message,
+        message_type: "text",
+      });
 
       let resolved = false;
 
@@ -128,7 +131,6 @@ export default function useSocket(userId) {
       };
 
       const onError = (error) => {
-        console.error("❌ Message send error:", error);
         if (!resolved) {
           resolved = true;
           reject(new Error(error));
@@ -147,8 +149,70 @@ export default function useSocket(userId) {
     });
   };
 
+  // Upload image to backend → Cloudinary, then send via socket
+  const sendImageMessage = async (conversationId, imageFile) => {
+    if (!socketRef.current?.connected) {
+      throw new Error("Socket not connected");
+    }
+
+    // Step 1: Upload image to backend → Cloudinary
+    const formData = new FormData();
+    formData.append("image", imageFile);
+
+    const response = await api.post(
+      `${BACKEND_URL}/api/messages/upload-image/${conversationId}`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    );
+
+    const { image_url } = response.data;
+
+    // Step 2: Emit image message via socket
+    return new Promise((resolve, reject) => {
+      socketRef.current.emit("send_message", {
+        senderUserId: userId,
+        conversationId,
+        message_type: "image",
+        image_url,
+      });
+
+      let resolved = false;
+
+      const onSent = (response) => {
+        if (!resolved) {
+          resolved = true;
+          resolve({
+            messageId:
+              response.messageId || response.id || response.message?.id,
+            conversationId: response.conversationId,
+            message: response.message,
+            success: true,
+          });
+        }
+      };
+
+      const onError = (error) => {
+        if (!resolved) {
+          resolved = true;
+          reject(new Error(error));
+        }
+      };
+
+      socketRef.current.once("message_sent", onSent);
+      socketRef.current.once("error_message", onError);
+
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          reject(new Error("Image message send timeout"));
+        }
+      }, 10000);
+    });
+  };
+
+  // Emit typing start event
   const startTyping = (conversationId, userName) => {
-    if (socketRef.current && socketRef.current.connected) {
+    if (socketRef.current?.connected) {
       socketRef.current.emit("typing_start", {
         conversationId,
         userId,
@@ -157,17 +221,16 @@ export default function useSocket(userId) {
     }
   };
 
+  // Emit typing stop event
   const stopTyping = (conversationId) => {
-    if (socketRef.current && socketRef.current.connected) {
-      socketRef.current.emit("typing_stop", {
-        conversationId,
-        userId,
-      });
+    if (socketRef.current?.connected) {
+      socketRef.current.emit("typing_stop", { conversationId, userId });
     }
   };
 
   return {
     sendMessage,
+    sendImageMessage,
     incomingMessage,
     markMessageAsRead,
     messageStatusUpdate,

@@ -15,6 +15,8 @@ import { useState, useEffect } from "react";
 import { api } from "../../Interceptor/auth";
 import UserListItem from "../common/UserListItem";
 
+const BACKEND_URL = process.env.REACT_APP_API_URL;
+
 export default function NewChatDialog({
   open,
   onClose,
@@ -26,63 +28,61 @@ export default function NewChatDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const [creatingChat, setCreatingChat] = useState(false);
   const [error, setError] = useState(null);
-  const baseurl = process.env.REACT_APP_API_URL;
 
   useEffect(() => {
-    if (open && currentUserId) {
-      fetchUsers();
-    }
+    if (open && currentUserId) fetchUsers();
   }, [open, currentUserId]);
 
+  // ─── Fetch All Users ────────────────────────────────────────────────────────
   async function fetchUsers() {
     try {
       setLoading(true);
       setError(null);
-
-      const response = await api.get(`${baseurl}/users/list/${currentUserId}`);
-
+      const response = await api.get(
+        `${BACKEND_URL}/users/list/${currentUserId}`,
+      );
       setUsers(response.data);
     } catch (error) {
       console.error("Error fetching users:", error);
-      console.error("Error response:", error.response?.data);
       setError(error.response?.data?.error || "Failed to fetch users");
     } finally {
       setLoading(false);
     }
   }
 
+  // ─── Create Or Open Existing Chat ──────────────────────────────────────────
   async function handleUserClick(user) {
     try {
       setCreatingChat(true);
 
-      // Create or get existing private conversation
-      const response = await api.post(`${baseurl}/conversations/create`, {
+      const response = await api.post(`${BACKEND_URL}/conversations/create`, {
         sender_id: currentUserId,
         receiver_id: user.id,
       });
 
-      // Format the chat data with conversationId
       const chatData = {
-        id: response.data.id, // Other user's ID
+        id: response.data.id,
         name: response.data.name,
         profile_photo: response.data.profile_photo,
         phone_number: response.data.phone_number,
-        conversationId: response.data.conversationId, // Conversation ID
+        conversationId: response.data.conversationId,
       };
 
-      // Close dialog first
       onClose();
-
-      // Notify parent component with the chat data
       onChatCreated(chatData, response.data.isNew);
     } catch (error) {
       console.error("Error creating chat:", error);
-      console.error("Error response:", error.response?.data);
       setError(error.response?.data?.error || "Failed to create chat");
     } finally {
       setCreatingChat(false);
     }
   }
+
+  const handleClose = () => {
+    setSearchQuery("");
+    setError(null);
+    onClose();
+  };
 
   const filteredUsers = users.filter((user) =>
     user.name.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -91,15 +91,11 @@ export default function NewChatDialog({
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       maxWidth="sm"
       fullWidth
       PaperProps={{
-        sx: {
-          borderRadius: "16px",
-          minHeight: "500px",
-          maxHeight: "80vh",
-        },
+        sx: { borderRadius: "16px", minHeight: "500px", maxHeight: "80vh" },
       }}
     >
       {/* Header */}
@@ -117,7 +113,7 @@ export default function NewChatDialog({
           New Chat
         </Typography>
         <IconButton
-          onClick={onClose}
+          onClick={handleClose}
           size="small"
           sx={{
             color: "white",

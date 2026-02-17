@@ -1,14 +1,13 @@
-// routes/message.route.js
 import express from "express";
+import { chatImageUpload } from "../middleware/upload.js";
 
-import { upload } from "../middleware/upload";
 const router = express.Router();
 
-// Only upload image and return URL - saving happens via socket
+// POST /api/messages/upload-image/:conversationId
 router.post(
-  "/upload-image",
+  "/messages/upload-image/:conversationId",
   (req, res, next) => {
-    upload.single("image")(req, res, (err) => {
+    chatImageUpload.single("image")(req, res, (err) => {
       if (err) return res.status(500).json({ error: err.message });
       next();
     });

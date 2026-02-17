@@ -3,7 +3,7 @@ import { UserProvider } from "./context/UserContext";
 import HeaderNav from "./components/HeaderNav";
 import Login from "./components/Login";
 import SignUp from "./components/SignUp";
-import Home from "./components/Home";
+import Home from "./pages/Home";
 import Profile from "./components/Profile";
 
 function App() {

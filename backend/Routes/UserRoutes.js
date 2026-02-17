@@ -1,7 +1,7 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 // import Users from "../Models/Users.js";
-import upload from "../middleware/upload.js";
+import { profileUpload } from "../middleware/upload.js";
 import { Op } from "sequelize";
 import {
   Users,
@@ -657,7 +657,7 @@ router.get("/me", async (req, res) => {
 router.put(
   "/:id",
   (req, res, next) => {
-    upload.single("profile_photo")(req, res, (err) => {
+    profileUpload.single("profile_photo")(req, res, (err) => {
       if (err) return res.status(500).json({ error: err.message });
       next();
     });

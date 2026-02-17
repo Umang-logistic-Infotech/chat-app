@@ -5,75 +5,79 @@ import {
   ConversationParticipants,
   Users,
 } from "../Models/index.js";
-import upload from "../middleware/upload.js";
+import { profileUpload } from "../middleware/upload.js";
 
 const router = express.Router();
 
-router.post("/create", upload.single("group_photo"), async (req, res) => {
-  try {
-    const { name, description, memberIds, createdBy } = req.body;
+router.post(
+  "/create",
+  profileUpload.single("group_photo"),
+  async (req, res) => {
+    try {
+      const { name, description, memberIds, createdBy } = req.body;
 
-    const parsedMemberIds = JSON.parse(memberIds);
+      const parsedMemberIds = JSON.parse(memberIds);
 
-    if (!name || !parsedMemberIds || parsedMemberIds.length < 2) {
-      return res.status(400).json({
-        error: "Group name and at least 2 members are required",
+      if (!name || !parsedMemberIds || parsedMemberIds.length < 2) {
+        return res.status(400).json({
+          error: "Group name and at least 2 members are required",
+        });
+      }
+
+      let groupPhotoUrl = null;
+      if (req.file) {
+        groupPhotoUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+      }
+
+      const conversation = await Conversations.create({
+        type: "group",
+        name,
+        description,
+        created_by: createdBy,
+        group_photo: groupPhotoUrl,
       });
+
+      const participantsData = parsedMemberIds.map((userId) => ({
+        conversation_id: conversation.id,
+        user_id: userId,
+        role: String(userId) === String(createdBy) ? "admin" : "member",
+      }));
+
+      await ConversationParticipants.bulkCreate(participantsData);
+
+      const groupData = await Conversations.findOne({
+        where: { id: conversation.id },
+        include: [
+          {
+            model: ConversationParticipants,
+            as: "participants",
+            include: [
+              {
+                model: Users,
+                as: "user",
+                attributes: ["id", "name", "profile_photo", "phone_number"],
+              },
+            ],
+          },
+          {
+            model: Users,
+            as: "creator",
+            attributes: ["id", "name", "profile_photo"],
+          },
+        ],
+      });
+
+      res.status(201).json({
+        success: true,
+        group: groupData,
+        message: "Group created successfully",
+      });
+    } catch (error) {
+      console.error("Error creating group:", error);
+      res.status(500).json({ error: error.message });
     }
-
-    let groupPhotoUrl = null;
-    if (req.file) {
-      groupPhotoUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-    }
-
-    const conversation = await Conversations.create({
-      type: "group",
-      name,
-      description,
-      created_by: createdBy,
-      group_photo: groupPhotoUrl,
-    });
-
-    const participantsData = parsedMemberIds.map((userId) => ({
-      conversation_id: conversation.id,
-      user_id: userId,
-      role: String(userId) === String(createdBy) ? "admin" : "member",
-    }));
-
-    await ConversationParticipants.bulkCreate(participantsData);
-
-    const groupData = await Conversations.findOne({
-      where: { id: conversation.id },
-      include: [
-        {
-          model: ConversationParticipants,
-          as: "participants",
-          include: [
-            {
-              model: Users,
-              as: "user",
-              attributes: ["id", "name", "profile_photo", "phone_number"],
-            },
-          ],
-        },
-        {
-          model: Users,
-          as: "creator",
-          attributes: ["id", "name", "profile_photo"],
-        },
-      ],
-    });
-
-    res.status(201).json({
-      success: true,
-      group: groupData,
-      message: "Group created successfully",
-    });
-  } catch (error) {
-    console.error("Error creating group:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
+  },
+);
 
 router.get("/user/:userId", async (req, res) => {
   try {
@@ -232,65 +236,69 @@ router.post("/:groupId/leave", async (req, res) => {
   }
 });
 
-router.put("/:groupId", upload.single("group_photo"), async (req, res) => {
-  try {
-    const { groupId } = req.params;
-    const { name, description, updatedBy } = req.body;
+router.put(
+  "/:groupId",
+  profileUpload.single("group_photo"),
+  async (req, res) => {
+    try {
+      const { groupId } = req.params;
+      const { name, description, updatedBy } = req.body;
 
-    const participant = await ConversationParticipants.findOne({
-      where: {
-        conversation_id: groupId,
-        user_id: updatedBy,
-        role: "admin",
-      },
-    });
-
-    if (!participant) {
-      return res.status(403).json({
-        error: "Only admins can update group info",
-      });
-    }
-
-    const updateData = {
-      name,
-      description,
-    };
-
-    if (req.file) {
-      updateData.group_photo = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-    }
-
-    await Conversations.update(updateData, {
-      where: { id: groupId, type: "group" },
-    });
-
-    const updatedGroup = await Conversations.findOne({
-      where: { id: groupId },
-      include: [
-        {
-          model: ConversationParticipants,
-          as: "participants",
-          include: [
-            {
-              model: Users,
-              as: "user",
-              attributes: ["id", "name", "profile_photo"],
-            },
-          ],
+      const participant = await ConversationParticipants.findOne({
+        where: {
+          conversation_id: groupId,
+          user_id: updatedBy,
+          role: "admin",
         },
-      ],
-    });
+      });
 
-    res.json({
-      success: true,
-      group: updatedGroup,
-      message: "Group updated successfully",
-    });
-  } catch (error) {
-    console.error("Error updating group:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
+      if (!participant) {
+        return res.status(403).json({
+          error: "Only admins can update group info",
+        });
+      }
+
+      const updateData = {
+        name,
+        description,
+      };
+
+      if (req.file) {
+        updateData.group_photo = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+      }
+
+      await Conversations.update(updateData, {
+        where: { id: groupId, type: "group" },
+      });
+
+      const updatedGroup = await Conversations.findOne({
+        where: { id: groupId },
+        include: [
+          {
+            model: ConversationParticipants,
+            as: "participants",
+            include: [
+              {
+                model: Users,
+                as: "user",
+                attributes: ["id", "name", "profile_photo"],
+              },
+            ],
+          },
+        ],
+      });
+
+      res.json({
+        success: true,
+        group: updatedGroup,
+        message: "Group updated successfully",
+      });
+    } catch (error) {
+      console.error("Error updating group:", error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
 
 router.put("/:groupId/make-admin/:userId", async (req, res) => {
   try {
