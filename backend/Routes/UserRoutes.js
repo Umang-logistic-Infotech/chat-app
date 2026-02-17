@@ -654,49 +654,47 @@ router.get("/me", async (req, res) => {
 });
 
 // Update user (with profile photo upload)
-router.put("/:id", upload.single("profile_photo"), async (req, res) => {
-  try {
-    const updateData = {};
-
-    // Add name if provided
-    if (req.body.name) {
-      updateData.name = req.body.name;
-    }
-
-    // Store the image URL if file was uploaded
-    if (req.file) {
-      // Store the URL that the frontend can use to access the image
-      updateData.profile_photo = `${process.env.IMAGE_UPLOAD_URL}/uploads/${req.file.filename}`;
-      // updateData.profile_photo = `http://192.168.0.131:5000/uploads/${req.file.filename}`;
-    }
-
-    const updatedUser = await Users.updateUser(req.params.id, updateData);
-
-    if (!updatedUser) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Return user data without password
-    const userData = {
-      id: updatedUser.id,
-      name: updatedUser.name,
-      profile_photo: updatedUser.profile_photo,
-    };
-
-    // Update user cookie
-    res.cookie("user", JSON.stringify(userData), {
-      maxAge: 24 * 60 * 60 * 1000,
-      sameSite: "lax",
+router.put(
+  "/:id",
+  (req, res, next) => {
+    upload.single("profile_photo")(req, res, (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      next();
     });
+  },
+  async (req, res) => {
+    try {
+      const updateData = {};
 
-    res.json({ message: "User updated successfully", data: userData });
-  } catch (err) {
-    if (err.name === "SequelizeValidationError") {
-      return res.status(400).json({ message: err.errors[0].message });
+      if (req.body.name) updateData.name = req.body.name;
+      if (req.file) updateData.profile_photo = req.file.path;
+
+      const updatedUser = await Users.updateUser(req.params.id, updateData);
+
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const userData = {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        profile_photo: updatedUser.profile_photo,
+      };
+
+      res.cookie("user", JSON.stringify(userData), {
+        maxAge: 24 * 60 * 60 * 1000,
+        sameSite: "lax",
+      });
+
+      res.json({ message: "User updated successfully", data: userData });
+    } catch (err) {
+      if (err.name === "SequelizeValidationError") {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      res.status(500).json({ error: err.message });
     }
-    res.status(500).json({ error: err.message });
-  }
-});
+  },
+);
 
 // Delete user
 router.delete("/:id", async (req, res) => {

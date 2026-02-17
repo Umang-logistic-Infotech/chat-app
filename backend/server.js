@@ -41,8 +41,6 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(cookieParser());
 
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
 app.use("/users", UserRoutes);
 app.use("/conversations", ConversationRoutes);
 app.use("/conversations/group", GroupRoutes);

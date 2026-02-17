@@ -20,7 +20,16 @@ const Messages = db.define(
     },
     message: {
       type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    message_type: {
+      type: DataTypes.ENUM("text", "image"),
+      defaultValue: "text",
       allowNull: false,
+    },
+    image_url: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
     conversation_id: {
       type: DataTypes.INTEGER,
