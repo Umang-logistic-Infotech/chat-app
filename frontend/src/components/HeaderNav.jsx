@@ -11,7 +11,7 @@ import MenuItem from "@mui/material/MenuItem";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 import { api } from "../Interceptor/auth";
-
+import logo from "../images/logo.png";
 api.defaults.withCredentials = true;
 
 export default function HeaderNav() {
@@ -42,6 +42,7 @@ export default function HeaderNav() {
     <Box>
       <AppBar position="sticky" elevation={1} sx={{ top: 0 }}>
         <Toolbar>
+          <img src={logo} height={40} width="auto" />
           <Typography
             variant="h6"
             component="div"

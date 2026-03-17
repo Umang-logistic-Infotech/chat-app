@@ -17,7 +17,7 @@ const db = new Sequelize(
 db.authenticate()
   .then(() => {
     console.log("Database connected successfully");
-    return db.sync(); // Use { force: true } to drop and recreate tables (WARNING: deletes data)
+    return db.sync({alter : true}); // Use { force: true } to drop and recreate tables (WARNING: deletes data)
   })
   .then(() => {
     console.log("All models were synchronized successfully");

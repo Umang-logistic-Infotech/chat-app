@@ -6,6 +6,9 @@ import {
   Users,
 } from "../Models/index.js";
 import { Op } from "sequelize";
+import { sendNotification,buildNotificationPayload } from "../sse/notificationService.js";
+
+
 
 export default function setupSocketHandlers(io) {
   io.on("connection", (socket) => {
@@ -27,140 +30,324 @@ export default function setupSocketHandlers(io) {
       }
     });
 
+    // socket.on(
+    //   "send_message",
+    //   async ({
+    //     senderUserId,
+    //     conversationId,
+    //     message,
+    //     message_type,
+    //     image_url,
+    //   }) => {
+    //     try {
+    //       if (!conversationId) {
+    //         return socket.emit("error_message", "Conversation ID is required");
+    //       }
+
+    //       if (!senderUserId) {
+    //         return socket.emit("error_message", "Sender ID is required");
+    //       }
+
+    //       // ← Old code was: if (!message) which blocked image messages
+    //       if (message_type === "text" && !message) {
+    //         return socket.emit("error_message", "Message is required");
+    //       }
+
+    //       if (message_type === "image" && !image_url) {
+    //         return socket.emit("error_message", "Image URL is required");
+    //       }
+
+    //       const conversation = await Conversations.findByPk(conversationId);
+
+    //       if (!conversation) {
+    //         return socket.emit("error_message", "Conversation not found");
+    //       }
+
+    //       const isParticipant = await ConversationParticipants.findOne({
+    //         where: {
+    //           conversation_id: conversationId,
+    //           user_id: senderUserId,
+    //         },
+    //       });
+
+    //       if (!isParticipant) {
+    //         return socket.emit(
+    //           "error_message",
+    //           "You are not a participant in this conversation",
+    //         );
+    //       }
+
+    //       // ← Now saves message_type and image_url too
+    //       const savedMessage = await Messages.create({
+    //         sender_id: senderUserId,
+    //         message: message || null,
+    //         message_type: message_type || "text",
+    //         image_url: image_url || null,
+    //         conversation_id: conversationId,
+    //         status: "sent",
+    //       });
+
+    //       const sender = await Users.findByPk(senderUserId, {
+    //         attributes: ["id", "name", "profile_photo"],
+    //       });
+
+    //       // ← Now includes message_type and image_url in messageData
+    //       const messageData = {
+    //         id: savedMessage.id,
+    //         sender_id: senderUserId,
+    //         sender_name: sender.name,
+    //         sender_photo: sender.profile_photo,
+    //         message: savedMessage.message,
+    //         message_type: savedMessage.message_type,
+    //         image_url: savedMessage.image_url,
+    //         conversation_id: conversationId,
+    //         createdAt: savedMessage.createdAt,
+    //         status: "sent",
+    //         type: conversation.type,
+    //       };
+
+    //       socket.emit("message_sent", {
+    //         messageId: savedMessage.id,
+    //         conversationId: conversationId,
+    //         message: messageData,
+    //       });
+
+    //       const participants = await ConversationParticipants.findAll({
+    //         where: {
+    //           conversation_id: conversationId,
+    //           user_id: { [Op.ne]: senderUserId },
+    //         },
+    //       });
+
+    //       let deliveredToAtLeastOne = false;
+
+    //       for (const participant of participants) {
+    //         const receiverUserId = participant.user_id;
+
+    //         const receiverStatus = await ActiveUsers.findOne({
+    //           where: { user_id: receiverUserId },
+    //         });
+
+    //         // ── Determine conversation type for notification ───────────────────
+    //         // 'group_message' if group conversation, 'new_message' if private
+    //         const notificationType =
+    //           conversation.type === "group" ? "group_message" : "new_message";
+
+    //         // ── Build notification payload from existing messageData ───────────
+    //         // buildNotificationPayload shapes the data for the frontend toast
+    //         const notificationPayload = buildNotificationPayload(
+    //           messageData,
+    //           notificationType
+    //         );
+
+    //         if (
+    //           receiverStatus?.status === "online" &&
+    //           receiverStatus.socket_id
+    //         ) {
+    //           deliveredToAtLeastOne = true;
+
+    //           // ── Existing socket emit (unchanged) ────────────────────────────
+    //           io.to(receiverStatus.socket_id).emit("receive_message", {
+    //             ...messageData,
+    //             receiver_id: receiverUserId,
+    //             status: "delivered",
+    //           });
+
+    //           // ── NEW: Push SSE notification to online user ────────────────────
+    //           // Runs alongside socket emit — separate concern
+    //           // If user has SSE connection → instant push
+    //           // If not (SSE not yet connected) → queued in DB
+    //           await sendNotification(receiverUserId, notificationPayload);
+
+    //         } else {
+    //           console.log(`⚠️ User ${receiverUserId} is offline`);
+
+    //           // ── NEW: Queue SSE notification for offline user ─────────────────
+    //           // Saved to queued_notifications table
+    //           // Flushed when user reconnects SSE stream
+    //           await sendNotification(receiverUserId, notificationPayload);
+    //         }
+    //       }
+
+    //       if (deliveredToAtLeastOne) {
+    //         await savedMessage.update({ status: "delivered" });
+
+    //         socket.emit("message_status_update", {
+    //           messageId: savedMessage.id,
+    //           conversationId: conversationId,
+    //           status: "delivered",
+    //         });
+    //       } else {
+    //         console.log(
+    //           `⚠️ No participants online, message will be delivered later`,
+    //         );
+    //       }
+    //     } catch (err) {
+    //       console.error("❌ send_message error:", err);
+    //       socket.emit("error_message", "Failed to send message");
+    //     }
+    //   },
+    // );
+
+
+
+
+
     socket.on(
-      "send_message",
-      async ({
-        senderUserId,
-        conversationId,
-        message,
-        message_type,
-        image_url,
-      }) => {
-        try {
-          if (!conversationId) {
-            return socket.emit("error_message", "Conversation ID is required");
-          }
+  "send_message",
+  async ({
+    senderUserId,
+    conversationId,
+    message,
+    message_type,
+    image_url,
+  }) => {
+    try {
+      if (!conversationId) {
+        return socket.emit("error_message", "Conversation ID is required");
+      }
 
-          if (!senderUserId) {
-            return socket.emit("error_message", "Sender ID is required");
-          }
+      if (!senderUserId) {
+        return socket.emit("error_message", "Sender ID is required");
+      }
 
-          // ← Old code was: if (!message) which blocked image messages
-          if (message_type === "text" && !message) {
-            return socket.emit("error_message", "Message is required");
-          }
+      if (message_type === "text" && !message) {
+        return socket.emit("error_message", "Message is required");
+      }
 
-          if (message_type === "image" && !image_url) {
-            return socket.emit("error_message", "Image URL is required");
-          }
+      if (message_type === "image" && !image_url) {
+        return socket.emit("error_message", "Image URL is required");
+      }
 
-          const conversation = await Conversations.findByPk(conversationId);
+      const conversation = await Conversations.findByPk(conversationId);
 
-          if (!conversation) {
-            return socket.emit("error_message", "Conversation not found");
-          }
+      if (!conversation) {
+        return socket.emit("error_message", "Conversation not found");
+      }
 
-          const isParticipant = await ConversationParticipants.findOne({
-            where: {
-              conversation_id: conversationId,
-              user_id: senderUserId,
-            },
+      const isParticipant = await ConversationParticipants.findOne({
+        where: {
+          conversation_id: conversationId,
+          user_id: senderUserId,
+        },
+      });
+
+      if (!isParticipant) {
+        return socket.emit(
+          "error_message",
+          "You are not a participant in this conversation",
+        );
+      }
+
+      const savedMessage = await Messages.create({
+        sender_id: senderUserId,
+        message: message || null,
+        message_type: message_type || "text",
+        image_url: image_url || null,
+        conversation_id: conversationId,
+        status: "sent",
+      });
+
+      const sender = await Users.findByPk(senderUserId, {
+        attributes: ["id", "name", "profile_photo"],
+      });
+
+      const messageData = {
+        id: savedMessage.id,
+        sender_id: senderUserId,
+        sender_name: sender.name,
+        sender_photo: sender.profile_photo,
+        message: savedMessage.message,
+        message_type: savedMessage.message_type,
+        image_url: savedMessage.image_url,
+        conversation_id: conversationId,
+        createdAt: savedMessage.createdAt,
+        status: "sent",
+        type: conversation.type,
+      };
+
+      socket.emit("message_sent", {
+        messageId: savedMessage.id,
+        conversationId: conversationId,
+        message: messageData,
+      });
+
+      const participants = await ConversationParticipants.findAll({
+        where: {
+          conversation_id: conversationId,
+          user_id: { [Op.ne]: senderUserId },
+        },
+      });
+
+      let deliveredToAtLeastOne = false;
+
+      for (const participant of participants) {
+        const receiverUserId = participant.user_id;
+
+        const receiverStatus = await ActiveUsers.findOne({
+          where: { user_id: receiverUserId },
+        });
+
+        // ── Determine notification type ──────────────────────────────────
+        // group_message if group conversation, new_message if private
+        const notificationType =
+          conversation.type === "group" ? "group_message" : "new_message";
+
+        // ── Build notification payload from existing messageData ─────────
+        // Shapes the data consistently for the frontend toast
+        const notificationPayload = buildNotificationPayload(
+          messageData,
+          notificationType
+        );
+
+        if (
+          receiverStatus?.status === "online" &&
+          receiverStatus.socket_id
+        ) {
+          deliveredToAtLeastOne = true;
+
+          // ── Existing socket emit (unchanged) ────────────────────────
+          io.to(receiverStatus.socket_id).emit("receive_message", {
+            ...messageData,
+            receiver_id: receiverUserId,
+            status: "delivered",
           });
 
-          if (!isParticipant) {
-            return socket.emit(
-              "error_message",
-              "You are not a participant in this conversation",
-            );
-          }
+          // ── NEW: Push SSE notification to online user ────────────────
+          // Runs alongside socket emit — completely separate concern
+          // Socket → delivers the actual message to chat UI
+          // SSE    → delivers the notification toast
+          await sendNotification(receiverUserId, notificationPayload);
 
-          // ← Now saves message_type and image_url too
-          const savedMessage = await Messages.create({
-            sender_id: senderUserId,
-            message: message || null,
-            message_type: message_type || "text",
-            image_url: image_url || null,
-            conversation_id: conversationId,
-            status: "sent",
-          });
+        } else {
+          console.log(`⚠️ User ${receiverUserId} is offline`);
 
-          const sender = await Users.findByPk(senderUserId, {
-            attributes: ["id", "name", "profile_photo"],
-          });
-
-          // ← Now includes message_type and image_url in messageData
-          const messageData = {
-            id: savedMessage.id,
-            sender_id: senderUserId,
-            sender_name: sender.name,
-            sender_photo: sender.profile_photo,
-            message: savedMessage.message,
-            message_type: savedMessage.message_type,
-            image_url: savedMessage.image_url,
-            conversation_id: conversationId,
-            createdAt: savedMessage.createdAt,
-            status: "sent",
-            type: conversation.type,
-          };
-
-          socket.emit("message_sent", {
-            messageId: savedMessage.id,
-            conversationId: conversationId,
-            message: messageData,
-          });
-
-          const participants = await ConversationParticipants.findAll({
-            where: {
-              conversation_id: conversationId,
-              user_id: { [Op.ne]: senderUserId },
-            },
-          });
-
-          let deliveredToAtLeastOne = false;
-
-          for (const participant of participants) {
-            const receiverUserId = participant.user_id;
-
-            const receiverStatus = await ActiveUsers.findOne({
-              where: { user_id: receiverUserId },
-            });
-
-            if (
-              receiverStatus?.status === "online" &&
-              receiverStatus.socket_id
-            ) {
-              deliveredToAtLeastOne = true;
-
-              io.to(receiverStatus.socket_id).emit("receive_message", {
-                ...messageData,
-                receiver_id: receiverUserId,
-                status: "delivered",
-              });
-            } else {
-              console.log(`⚠️ User ${receiverUserId} is offline`);
-            }
-          }
-
-          if (deliveredToAtLeastOne) {
-            await savedMessage.update({ status: "delivered" });
-
-            socket.emit("message_status_update", {
-              messageId: savedMessage.id,
-              conversationId: conversationId,
-              status: "delivered",
-            });
-          } else {
-            console.log(
-              `⚠️ No participants online, message will be delivered later`,
-            );
-          }
-        } catch (err) {
-          console.error("❌ send_message error:", err);
-          socket.emit("error_message", "Failed to send message");
+          // ── NEW: Queue SSE notification for offline user ─────────────
+          // No SSE connection → saved to queued_notifications table
+          // Flushed automatically when user reconnects SSE stream
+          await sendNotification(receiverUserId, notificationPayload);
         }
-      },
-    );
+      }
 
+      if (deliveredToAtLeastOne) {
+        await savedMessage.update({ status: "delivered" });
+
+        socket.emit("message_status_update", {
+          messageId: savedMessage.id,
+          conversationId: conversationId,
+          status: "delivered",
+        });
+      } else {
+        console.log(
+          `⚠️ No participants online, message will be delivered later`,
+        );
+      }
+    } catch (err) {
+      console.error("❌ send_message error:", err);
+      socket.emit("error_message", "Failed to send message");
+    }
+  },
+);
     socket.on("message_delivered", async (messageId) => {
       try {
         const message = await Messages.findByPk(messageId);

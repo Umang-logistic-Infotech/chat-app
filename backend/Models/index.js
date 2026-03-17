@@ -3,6 +3,8 @@ import Conversations from "./Conversations.js";
 import ConversationParticipants from "./Conversation_Participants.js";
 import Messages from "./Messages.js";
 import ActiveUsers from "./ActiveUsers.js";
+import QueuedNotification from "./QueuedNotification.js";
+import SSEToken from "./SSEToken.js";
 
 // Conversations <-> ConversationParticipants
 Conversations.hasMany(ConversationParticipants, {
@@ -70,10 +72,21 @@ ActiveUsers.belongsTo(Users, {
   as: "user",
 });
 
+
+Users.hasMany(SSEToken, {
+  foreignKey: "user_id",
+  onDelete: "CASCADE",
+});
+
+SSEToken.belongsTo(Users, {
+  foreignKey: "user_id",
+});
 export {
   Users,
   Conversations,
   ConversationParticipants,
   Messages,
   ActiveUsers,
+  QueuedNotification,
+  SSEToken,
 };
