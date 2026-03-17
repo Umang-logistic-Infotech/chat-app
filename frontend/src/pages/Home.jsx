@@ -199,19 +199,31 @@ export default function Home() {
   };
 
   // ─── Handle Selected Chat ───────────────────────────────────────────────────
+  // ── Fires when conversation is selected ─────────────────────────────────
+  // Fetches messages if not loaded yet
   useEffect(() => {
     if (selectedChat?.conversationId) {
       if (!messages[selectedChat.conversationId]) {
         fetchMessagesForConversation(selectedChat.conversationId, null, 15);
       }
-      const chatMessages = messages[selectedChat.conversationId] || [];
-      chatMessages.forEach((msg) => {
-        if (msg.sender_id !== user.id && msg.status !== "read") {
-          markMessageAsRead(msg.id);
-        }
-      });
     }
   }, [selectedChat]);
+
+  // ── Fires when messages load for selected conversation ───────────────────
+  // Marks all unread messages as read
+  // Split into separate useEffect so it fires AFTER messages are loaded
+  // Previous single useEffect ran before fetchMessages completed → missed messages
+  useEffect(() => {
+    if (!selectedChat?.conversationId) return;
+
+    const chatMessages = messages[selectedChat.conversationId] || [];
+
+    chatMessages.forEach((msg) => {
+      if (msg.sender_id !== user.id && msg.status !== "read") {
+        markMessageAsRead(msg.id);
+      }
+    });
+  }, [selectedChat, messages]);  // ← depends on BOTH selectedChat AND messages
 
   // ─── Handle Online Status Updates ──────────────────────────────────────────
   useEffect(() => {

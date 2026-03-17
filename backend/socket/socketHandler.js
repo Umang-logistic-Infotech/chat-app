@@ -14,6 +14,7 @@ export default function setupSocketHandlers(io) {
   io.on("connection", (socket) => {
     socket.on("register", async (userId) => {
       try {
+        // ── Step 1: Mark user online (unchanged) ────────────────────────────
         await ActiveUsers.upsert({
           user_id: userId,
           status: "online",
@@ -25,6 +26,75 @@ export default function setupSocketHandlers(io) {
           user_id: userId,
           status: "online",
         });
+
+        // ── Step 2: Find all undelivered messages for this user ──────────────
+        // These are messages sent while user was offline
+        // status "sent" means saved in DB but never delivered to receiver
+        const undeliveredMessages = await Messages.findAll({
+          where: {
+            status: "sent",                    // only "sent" → not yet delivered
+            conversation_id: {
+              // Only messages in conversations this user participates in
+              [Op.in]: (
+                await ConversationParticipants.findAll({
+                  where: { user_id: userId },
+                  attributes: ["conversation_id"],
+                })
+              ).map((p) => p.conversation_id),
+            },
+            sender_id: { [Op.ne]: userId },    // not their own messages
+          },
+        });
+
+        if (undeliveredMessages.length === 0) return;
+
+        console.log(
+          `📬 ${undeliveredMessages.length} undelivered messages found for userId: ${userId}`
+        );
+
+        // ── Step 3: Group messages by sender ────────────────────────────────
+        // We need to notify each sender about their message status update
+        // Grouping avoids redundant DB lookups for same sender
+        const senderMap = new Map();
+
+        for (const msg of undeliveredMessages) {
+
+          // ── Update message status to "delivered" in DB ───────────────────
+          await msg.update({ status: "delivered" });
+
+          // ── Group by sender_id ───────────────────────────────────────────
+          if (!senderMap.has(msg.sender_id)) {
+            senderMap.set(msg.sender_id, []);
+          }
+          senderMap.get(msg.sender_id).push(msg);
+        }
+
+        // ── Step 4: Notify each sender their messages were delivered ─────────
+        // For each unique sender → find their socket → emit status update
+        for (const [senderId, msgs] of senderMap) {
+
+          const senderStatus = await ActiveUsers.findOne({
+            where: { user_id: senderId },
+          });
+
+          // Only notify if sender is currently online
+          // If sender is also offline → they'll see status when they come back
+          if (senderStatus?.status === "online" && senderStatus.socket_id) {
+
+            for (const msg of msgs) {
+              io.to(senderStatus.socket_id).emit("message_status_update", {
+                messageId: msg.id,
+                conversationId: msg.conversation_id,
+                status: "delivered",
+              });
+            }
+
+            console.log(
+              `✅ Delivered status synced → senderId: ${senderId} | ${msgs.length} message(s)`
+            );
+          }
+        }
+
       } catch (error) {
         console.error("❌ Error updating user status:", error);
       }
