@@ -8,6 +8,10 @@ import ChatArea from "../components/chat/ChatArea";
 import NewChatDialog from "../components/dialogs/NewChatDialog";
 import CreateGroupDialog from "../components/dialogs/CreateGroupDialog";
 
+import useSSE from "../hooks/useSSE";
+import useNotification from "../hooks/useNotification";
+import NotificationToast from "../components/common/NotificationToast";
+
 const BACKEND_URL = process.env.REACT_APP_API_URL;
 
 export default function Home() {
@@ -25,6 +29,10 @@ export default function Home() {
   const [newChatDialogOpen, setNewChatDialogOpen] = useState(false);
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
 
+  // ── NEW: state to hold the latest notification payload ───────────────────
+  // When SSE fires → we store payload here → NotificationToast reads it
+  // Reset to null after toast is dismissed
+  const [notifications, setNotifications] = useState([]); 
   const {
     sendMessage,
     sendImageMessage,
@@ -34,6 +42,61 @@ export default function Home() {
     userStatusUpdate,
   } = useSocket(user?.id);
 
+
+  // ── NEW: Browser Notification API hook ───────────────────────────────────
+  // Requests permission on mount
+  // Exposes showBrowserNotification() function
+  const { showBrowserNotification } = useNotification();
+
+
+  // ── NEW: SSE hook ─────────────────────────────────────────────────────────
+  // Connects to /notifications/stream
+  // Calls callback when notification arrives
+  // isSSEConnected can be used for debug UI if needed
+  const { isConnected: isSSEConnected } = useSSE(user?.id, (notification) => {
+
+      // Give each notification a unique ID for individual removal
+      const notificationWithId = {
+        ...notification,
+        id: `${notification.senderId}_${Date.now()}`,
+      };
+
+      // Push to array → new toast appears
+      setNotifications((prev) => [...prev, notificationWithId]);
+
+      // Auto-remove after 4 seconds
+      setTimeout(() => {
+        setNotifications((prev) =>
+          prev.filter((n) => n.id !== notificationWithId.id)
+        );
+      }, 4000);
+
+      // Browser notification — senderId used for per-sender tag
+      showBrowserNotification(
+        notification.senderName,
+        notification.messagePreview,
+        notification.senderPhoto,
+        notification.senderId,       // ← NEW: per-sender tag
+      );
+    });
+
+  // ─── Handle Notification Click → Open Conversation ───────────────────────
+  const handleNotificationClick = (notification) => {
+      // Find the chat in chats array by conversationId
+      const chat = chats.find(
+        (c) => Number(c.conversationId) === Number(notification.conversationId)
+      );
+
+      // If found → select it → opens that conversation
+      if (chat) {
+        setSelectedChat(chat);
+      }
+
+      // Remove this specific notification from stack
+      setNotifications((prev) =>
+        prev.filter((n) => n.id !== notification.id)
+      );
+    };
   // ─── Fetch Conversations ────────────────────────────────────────────────────
   useEffect(() => {
     if (user != null) fetchConversations();
@@ -428,6 +491,14 @@ export default function Home() {
         currentUserId={user?.id}
         onGroupCreated={handleGroupCreated}
       />
+
+      <NotificationToast
+        notifications={notifications}
+        onClose={(id) => setNotifications((prev) => prev.filter((n) => n.id !== id))}
+        onNotificationClick={handleNotificationClick}   // ← NEW
+        activeConvId={selectedChat?.conversationId}
+      />
+
     </Box>
   );
 }
