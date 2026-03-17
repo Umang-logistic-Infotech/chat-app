@@ -4,13 +4,26 @@ A real-time chat frontend built with **React**, **Material UI**, **Socket.io Cli
 
 ---
 
+## �️ Stack
+
+| Layer | Technology |
+|---|---|
+| UI Framework | React 19 |
+| Component Library | Material UI (MUI) v7 |
+| Real-time | Socket.io Client |
+| HTTP | Axios (with auth interceptor) |
+| Routing | React Router DOM v7 |
+| Message List | react-virtuoso (virtualized) |
+| Image Viewer | yet-another-react-lightbox |
+| Auth storage | js-cookie |
+
+---
+
 ## 📁 Project Structure
 
 ```
 src/
 ├── App.js                              # Root component — routing setup
-├── pages/
-│   └── Home.jsx                        # Main chat page — brain of the app
 ├── components/
 │   ├── chat/
 │   │   ├── ChatArea.jsx                # Container for the active chat
@@ -21,7 +34,7 @@ src/
 │   │   └── EmptyChatArea.jsx           # Shown when no chat is selected
 │   ├── sidebar/
 │   │   ├── Sidebar.jsx                 # Left panel container
-│   │   ├── SidebarHeader.jsx           # "Chats" title header
+│   │   ├── SidebarHeader.jsx           # "Chats" title + new chat button
 │   │   ├── SidebarSearch.jsx           # Search bar for filtering chats
 │   │   ├── ChatList.jsx                # Renders the list of conversations
 │   │   └── ChatListItem.jsx            # Single conversation row in sidebar
@@ -36,63 +49,73 @@ src/
 ├── context/
 │   └── UserContext.jsx                 # Global logged-in user state
 ├── Interceptor/
-│   └── auth.js                         # Axios instance with auth headers
+│   └── auth.js                         # Axios instance with JWT header
 └── pages/
-    └── Home.jsx                        # Entry point for the chat UI
+    └── Home.jsx                        # Main chat page — owns all state
 ```
 
 ---
 
 ## 📦 Packages Used
 
-| Package                      | Version  | Why Used                                                 |
-| ---------------------------- | -------- | -------------------------------------------------------- |
-| `react`                      | ^19.2.4  | Core UI library                                          |
-| `react-dom`                  | ^19.2.4  | DOM rendering for React                                  |
-| `react-router-dom`           | ^7.13.0  | Client-side routing between pages                        |
-| `@mui/material`              | ^7.3.7   | Full UI component library (inputs, dialogs, avatars etc) |
-| `@mui/icons-material`        | ^7.3.7   | MUI icon set (send, attach, done, etc.)                  |
-| `@emotion/react`             | ^11.14.0 | CSS-in-JS engine required by MUI                         |
-| `@emotion/styled`            | ^11.14.1 | Styled components support for MUI                        |
-| `socket.io-client`           | ^4.8.3   | Real-time WebSocket connection to backend                |
-| `axios`                      | ^1.13.4  | HTTP requests to backend REST API                        |
-| `react-virtuoso`             | ^4.18.1  | Virtualized list for rendering messages efficiently      |
-| `yet-another-react-lightbox` | ^3.29.1  | Full-screen image viewer with zoom + download            |
-| `js-cookie`                  | ^3.0.5   | Reading/writing browser cookies (JWT token)              |
-| `bootstrap`                  | ^5.3.8   | Utility CSS classes used in some components              |
-| `react-bootstrap`            | ^2.10.10 | Bootstrap React components                               |
-| `web-vitals`                 | ^2.1.4   | Performance metrics reporting                            |
+| Package | Version | Purpose |
+|---|---|---|
+| `react` | ^19.2.4 | Core UI library |
+| `react-dom` | ^19.2.4 | DOM rendering |
+| `react-router-dom` | ^7.13.0 | Client-side routing |
+| `@mui/material` | ^7.3.7 | UI components (inputs, dialogs, avatars, etc.) |
+| `@mui/icons-material` | ^7.3.7 | MUI icon set |
+| `@emotion/react` | ^11.14.0 | CSS-in-JS engine required by MUI |
+| `@emotion/styled` | ^11.14.1 | Styled component support for MUI |
+| `socket.io-client` | ^4.8.3 | WebSocket connection to backend |
+| `axios` | ^1.13.4 | HTTP requests to backend REST API |
+| `react-virtuoso` | ^4.18.1 | Virtualized list for performant message rendering |
+| `yet-another-react-lightbox` | ^3.29.1 | Full-screen image viewer with zoom + download |
+| `js-cookie` | ^3.0.5 | Read/write browser cookies (JWT token) |
+| `bootstrap` | ^5.3.8 | Utility CSS classes |
+| `react-bootstrap` | ^2.10.10 | Bootstrap React components |
+| `web-vitals` | ^2.1.4 | Performance metrics reporting |
+
+---
+
+## 🚀 Running the Frontend
+
+```bash
+npm install
+npm start      # runs on http://localhost:3000
+```
+
+### Environment Variables
+
+Create a `.env` file in `frontend/`:
+
+```env
+REACT_APP_API_URL=http://localhost:5000
+```
 
 ---
 
 ## 🧠 State Management
 
-There is **no external state management library** (no Redux, no Zustand). All state lives in `Home.jsx` using React's built-in `useState` and `useEffect`.
-
-### Why this approach?
-
-The app has one main page (the chat UI) and all data flows through it. Using Context or Redux would add unnecessary complexity for this scale.
+No external state library (no Redux, no Zustand). All state lives in `Home.jsx` using React's built-in `useState` and `useEffect`. The app has one main page (the chat UI), and all data flows through it — an external store would add unnecessary complexity at this scale.
 
 ### State in `Home.jsx`
 
+| State | Type | Description |
+|---|---|---|
+| `chats` | `Array` | All conversations the user is part of |
+| `selectedChat` | `Object \| null` | The currently open conversation |
+| `messages` | `{ [conversationId]: Message[] }` | Per-conversation message cache |
+| `onlineUsers` | `{ [userId]: { status, last_seen } }` | Real-time presence map |
+| `messagesPagination` | `{ [conversationId]: PaginationInfo }` | Per-conversation pagination state |
+| `loadingOldMessages` | `{ [conversationId]: boolean }` | Loading flag per conversation |
+| `newChatDialogOpen` | `boolean` | New private chat dialog visibility |
+| `createGroupDialogOpen` | `boolean` | Create group dialog visibility |
+
+### Why `messages` is keyed by `conversationId`
+
 ```javascript
-messages; // { [conversationId]: [msg1, msg2, ...] }
-chats; // array of all conversations the user is part of
-selectedChat; // the currently open conversation object
-onlineUsers; // { [userId]: { status, last_seen } }
-messagesPagination; // { [conversationId]: { hasMore, oldestMessageId, totalLoaded } }
-loadingOldMessages; // { [conversationId]: true/false }
-newChatDialogOpen; // boolean
-createGroupDialogOpen; // boolean
-```
-
-### Why `messages` is keyed by `conversationId`?
-
-```javascript
-// Instead of a flat array:
-messages = [msg1, msg2, msg3];
-
-// We store per conversation:
+// Per-conversation cache — not a flat array
 messages = {
   10: [msg1, msg2],
   15: [msg3, msg4, msg5],
@@ -100,13 +123,13 @@ messages = {
 };
 ```
 
-This means switching between chats is instant — no re-fetching needed if already loaded. Each conversation has its own message cache.
+Switching between chats is instant — no re-fetch if already loaded. Each conversation maintains its own independent message cache.
 
 ---
 
 ## 🔄 Data Flow
 
-### Props flow DOWN, events flow UP
+Props flow **down**, callbacks flow **up**:
 
 ```
 Home.jsx (owns all state)
@@ -116,19 +139,19 @@ Home.jsx (owns all state)
     ├── chats ──────────────────────────→ Sidebar → ChatList → ChatListItem
     ├── onlineUsers ────────────────────→ Sidebar → ChatList → ChatListItem
     │
-    ← onSendTextMessage(text) ─────────── MessageInput
+    ← onSendTextMessage(text)  ─────────── MessageInput
     ← onSendImageMessage(file) ─────────── MessageInput
     ← onSelectChat(chat) ───────────────── ChatListItem
     ← onLoadOlderMessages(convId) ─────── MessageList
     ← onChatCreated(chatData) ──────────── NewChatDialog
-    ← onGroupCreated(groupData) ─────────── CreateGroupDialog
+    ← onGroupCreated(groupData) ────────── CreateGroupDialog
 ```
 
 ---
 
-## 🔌 useSocket Hook
+## 🔌 `useSocket` Hook (`hooks/useSocket.js`)
 
-`useSocket.js` is a custom React hook that encapsulates **all Socket.io logic**. It is called once in `Home.jsx`:
+Encapsulates **all Socket.io logic**. Called once in `Home.jsx`:
 
 ```javascript
 const {
@@ -145,152 +168,143 @@ const {
 } = useSocket(user?.id);
 ```
 
-### Why a custom hook?
+`Home.jsx` does not interact with Socket.io directly — it only reacts to the reactive values the hook exposes.
 
-Keeps all socket logic in one place. `Home.jsx` does not need to know anything about Socket.io — it just reacts to the state values the hook exposes.
-
-### How socket events update React state
-
-The hook uses reactive state values that `Home.jsx` watches with `useEffect`:
+### How incoming socket events reach React state
 
 ```
 Socket event fires (e.g. receive_message)
         ↓
-useSocket sets incomingMessage state
+useSocket sets incomingMessage = { ...message, _timestamp: Date.now() }
         ↓
-Home.jsx useEffect detects the change (_timestamp ensures re-trigger)
+Home.jsx useEffect detects the change
         ↓
-Updates messages state with the new message
+messages state updated with the new message
         ↓
 React re-renders MessageList automatically
         ↓
 New MessageItem appears in UI
 ```
 
-The `_timestamp: Date.now()` trick is used because if two identical messages arrive back-to-back, React wouldn't re-run the useEffect (same object reference). Adding a timestamp forces it to always re-trigger.
+> The `_timestamp: Date.now()` field is added to every incoming message so that `useEffect` always re-triggers — even if two identical messages arrive back-to-back (same object reference would otherwise be ignored by React).
 
-### sendMessage vs sendImageMessage
-
-**sendMessage** (text):
+### Text message send flow
 
 ```
-emit send_message via socket
+Home.jsx calls sendMessage({ receiverUserId, message, conversationId })
         ↓
-wait for message_sent event (Promise)
+socket.emit("send_message", payload)
         ↓
-resolve with messageId + conversationId
+Wait for "message_sent" event (Promise)
+        ↓
+Resolve with { messageId, conversationId }
 ```
 
-**sendImageMessage** (image):
+### Image message send flow
 
 ```
-Step 1: POST /api/messages/upload-image/:conversationId (HTTP)
+Step 1: POST /api/messages/upload-image/:conversationId  (HTTP)
+        → Multer + Cloudinary → returns { image_url }
         ↓
-        Multer + Cloudinary → returns image_url
+Step 2: socket.emit("send_message", { ..., message_type: "image", image_url })
         ↓
-Step 2: emit send_message via socket with { message_type: "image", image_url }
+Wait for "message_sent" event (Promise)
         ↓
-        wait for message_sent event (Promise)
-        ↓
-        resolve with messageId + conversationId
+Resolve with { messageId, conversationId }
 ```
 
-Why HTTP first then socket? Because sockets cannot transfer binary file data efficiently. HTTP handles the file upload, socket handles the real-time notification.
+HTTP is used for the file upload because sockets cannot transfer binary data efficiently. The socket only carries the Cloudinary URL after the upload is done.
 
 ---
 
-## 🖼️ Image Sharing Flow (Frontend)
+## 🖼️ Image Sharing Flow
 
 ```
-User clicks attach button (MessageInput)
+User clicks attach icon (MessageInput)
         ↓
 Hidden <input type="file"> triggers
         ↓
-handleImageSelect() stores file + creates preview URL
+handleImageSelect() → stores File object + creates local preview URL
         ↓
-User sees image preview with cancel option
+User sees preview thumbnail with cancel option
         ↓
 User clicks Send
         ↓
-handleSendImage() in MessageInput calls onSendImageMessage(file)
-        ↓
-Home.jsx handleSendImageMessage() runs:
+Home.jsx handleSendImageMessage():
   1. Creates optimistic message with local preview URL (status: "sending")
-  2. Adds it to messages state immediately (so user sees it right away)
+  2. Appends it to messages state immediately → user sees it right away
   3. Calls sendImageMessage(conversationId, file) from useSocket
         ↓
-useSocket uploads to backend → Cloudinary → gets real image_url
+useSocket uploads file → Cloudinary → receives real image_url
         ↓
-Emits send_message via socket with image_url
+socket.emit("send_message") with image_url
         ↓
-On success: replaces optimistic message with real message + Cloudinary URL
-On failure: updates status to "failed"
+On success → replace optimistic message with real message + Cloudinary URL
+On failure → update optimistic message status to "failed"
 ```
 
-### Optimistic UI
-
-The image appears in chat **instantly** with a local preview URL before the upload even finishes. Once the real Cloudinary URL comes back, it silently replaces the local URL. The user never waits.
+The image appears **instantly** with a local blob preview. The Cloudinary URL silently replaces it on success — the user never waits to see the image.
 
 ---
 
-## 📜 MessageList & Virtualization
+## 📜 Message List & Virtualization (`MessageList.jsx`)
 
-`MessageList.jsx` uses **react-virtuoso** to render messages.
+`MessageList.jsx` uses **react-virtuoso** to render messages efficiently.
 
-### Why react-virtuoso?
+Without virtualization, 1000+ messages would create 1000+ DOM nodes causing severe scroll performance issues. react-virtuoso only renders messages currently visible on screen (plus a small buffer), keeping DOM size constant regardless of conversation length.
 
-Without virtualization, rendering 1000+ messages would create 1000+ DOM nodes, causing severe performance issues. react-virtuoso only renders the messages currently visible on screen (plus a small buffer), keeping the DOM lean regardless of how many messages exist.
+### Scroll behavior
 
-### Scroll Behavior
+| Trigger | Behavior |
+|---|---|
+| New chat selected | Scroll to bottom immediately |
+| My new message | Scroll to bottom smoothly |
+| Incoming message (theirs) | Scroll to bottom only if already at bottom |
+| Load older messages | Maintain scroll position — no jump |
+| Image loads | Scroll to bottom only for the last message |
 
-```
-New chat selected → scroll to bottom immediately
-New message arrives (mine) → scroll to bottom smoothly
-New message arrives (theirs) → scroll to bottom only if already at bottom
-Load older messages (scroll up) → maintain scroll position (don't jump)
-Image loads → scroll to bottom only for the last message
-```
+### Prepend older messages without scroll jump
 
-The `firstItemIndex` trick is used to support prepending older messages without scroll jumping. It starts at `100000` and decreases as older messages are loaded, so Virtuoso knows where in the list each item belongs.
+`firstItemIndex` starts at `100000` and decreases as older messages are prepended. Virtuoso uses this index to keep the current viewport stable when new items are inserted at the top.
 
 ---
 
-## 💬 MessageItem Component
+## 💬 Message Item (`MessageItem.jsx`)
 
-Handles rendering of a single message bubble. It handles two types:
+Renders a single message bubble. Handles two content types:
 
-### Text message:
+### Text message
 
 ```jsx
 <Paper>
   <Typography>{msg.message}</Typography>
-  <TimeStamp + StatusIcon />
+  <Timestamp /> <StatusIcon />
 </Paper>
 ```
 
-### Image message:
+### Image message
 
 ```jsx
 <Paper>
-  <img src={msg.image_url} onClick={handleImageClick} />
-  <TimeStamp + StatusIcon />
+  <img src={msg.image_url} onClick={openLightbox} />
+  <Timestamp /> <StatusIcon />
 </Paper>
-<Lightbox open={lightboxOpen} slides={allImages} index={lightboxIndex} />
+<Lightbox open={open} slides={allImages} index={lightboxIndex} />
 ```
 
-### Message Status Icons
+### Message status icons
 
-| Status      | Icon        | Color          |
-| ----------- | ----------- | -------------- |
-| `sending`   | Clock       | White 70%      |
-| `sent`      | Single tick | White 80%      |
-| `delivered` | Double tick | White 90%      |
-| `read`      | Double tick | Blue (#4fc3f7) |
-| `failed`    | Error icon  | Red            |
+| Status | Icon | Color |
+|---|---|---|
+| `sending` | Clock | White 70% |
+| `sent` | Single tick | White 80% |
+| `delivered` | Double tick | White 90% |
+| `read` | Double tick | Blue `#4fc3f7` |
+| `failed` | Error icon | Red |
 
-### Date Separators
+### Date separators
 
-Automatically shown between messages from different days:
+Automatically inserted between messages from different calendar days:
 
 ```
 ─────────── Today ───────────
@@ -298,33 +312,29 @@ Automatically shown between messages from different days:
 ─────────── Jan 15, 2025 ───────────
 ```
 
-### Group Chat Sender Names
+### Group chat sender names
 
-In group chats, the sender's name is shown above their message bubble in a unique color (derived from their user ID). The color is consistent — same user always gets the same color.
+In group conversations, the sender's display name appears above their bubble in a color derived from their user ID — the same user always gets the same color across all sessions.
 
 ---
 
-## 🔍 Lightbox (yet-another-react-lightbox)
+## 🔍 Image Lightbox (`yet-another-react-lightbox`)
 
-Used in `MessageItem.jsx` to view images full screen.
+Used in `MessageItem.jsx` for full-screen image viewing.
 
-### Features enabled:
+**Plugins enabled:** Zoom (up to 3×, pinch/scroll), Download (toolbar button), finite carousel (no looping).
 
-- **Zoom plugin** — pinch/scroll to zoom up to 3x
-- **Download plugin** — download button in toolbar
-- **finite carousel** — does not loop back from last to first image
+### How conversation-wide image navigation works
 
-### How it works:
-
-`MessageList.jsx` collects all image messages into an `allImages` array and passes it to every `MessageItem`. When a user clicks an image, the lightbox opens at the index of that specific image within `allImages`, allowing navigation between all images in the conversation.
+`MessageList.jsx` collects all image messages into a single `allImages` array and passes it to every `MessageItem`. Clicking any image opens the lightbox at the correct index within that array, allowing the user to navigate forward/backward through all images in the conversation.
 
 ```javascript
-// In MessageList
+// MessageList.jsx
 const allImages = messages
-  .filter((msg) => msg.message_type === "image")
-  .map((msg) => ({ src: msg.image_url }));
+  .filter((m) => m.message_type === "image")
+  .map((m) => ({ src: m.image_url }));
 
-// In MessageItem
+// MessageItem.jsx
 const handleImageClick = (imageUrl) => {
   const index = allImages.findIndex((img) => img.src === imageUrl);
   setLightboxIndex(index);
@@ -334,57 +344,39 @@ const handleImageClick = (imageUrl) => {
 
 ---
 
-## 📄 Pagination (Load Older Messages)
+## 📄 Pagination — Load Older Messages
 
-Messages are loaded **15 at a time** (most recent first). When the user scrolls to the top of the list, older messages are fetched.
+Messages are fetched **15 at a time**, most recent first. Scrolling to the top triggers a load of the next older batch.
+
+### Pagination state shape
 
 ```javascript
-messagesPagination = {
-  [conversationId]: {
-    hasMore: true, // are there older messages?
-    oldestMessageId: 42, // ID of oldest loaded message
-    totalMessages: 150, // total in DB
-    totalLoaded: 15, // how many loaded so far
-  },
+messagesPagination[conversationId] = {
+  hasMore: true,         // are there older messages in the DB?
+  oldestMessageId: 42,   // cursor — ID of oldest message currently loaded
+  totalMessages: 150,    // total messages in DB for this conversation
+  totalLoaded: 15,       // how many are loaded in state right now
 };
 ```
 
-The API uses cursor-based pagination via `before_id` query param:
+### API call
 
 ```
 GET /users/:conversationId?limit=15&before_id=42
 ```
 
-This fetches 15 messages older than message ID 42.
+Returns 15 messages with IDs less than `42`, ordered newest-first.
 
 ---
 
-## 🌐 Axios Interceptor
+## 🌐 Axios Interceptor (`Interceptor/auth.js`)
 
-`Interceptor/auth.js` exports a pre-configured axios instance that automatically:
+Exports a pre-configured Axios instance used for **all** API calls in the app. Automatically:
 
-- Attaches the JWT token from cookies to every request
-- Handles 401 errors (redirects to login)
+- Attaches the JWT token from cookies as `Authorization: Bearer <token>` on every request
+- Handles `401` responses by redirecting to the login page
 
-All API calls in the app use this instance instead of raw axios.
-
----
-
-## 🎨 UI & Styling
-
-Built entirely with **Material UI (MUI) v7**. No custom CSS files.
-
-### Theme colors used:
-
-- Primary gradient: `linear-gradient(135deg, #667eea 0%, #764ba2 100%)`
-- Background: `#f5f7fa` (main), `#fafbfc` (chat area)
-- My messages: Purple gradient bubble
-- Their messages: White bubble with shadow
-
-### Responsive behavior:
-
-- Sidebar: fixed 380px width
-- Chat area: fills remaining space with `flex: 1`
+Never use raw `axios` directly — always import from `Interceptor/auth.js`.
 
 ---
 
@@ -395,29 +387,36 @@ User submits login form
         ↓
 POST /users/login
         ↓
-Backend returns JWT in HTTP-only cookie
+Backend sets JWT in HTTP-only cookie
         ↓
 UserContext reads user from cookie on app load
         ↓
-All routes protected — redirect to login if no user
+Protected routes redirect to /login if no user in context
         ↓
-Axios interceptor attaches token to every request
+Axios interceptor attaches token to every outgoing request
 ```
 
 ---
 
-## 🚀 Running the Frontend
+## 🎨 UI & Styling
 
-```bash
-npm install
-npm start      # runs on http://localhost:3000
-```
+Built entirely with **MUI v7**. No custom CSS files (no `.css` or `.scss`).
 
-### Environment Variables
+### Colors
 
-```env
-REACT_APP_API_URL=http://localhost:5000
-```
+| Element | Value |
+|---|---|
+| Primary gradient | `linear-gradient(135deg, #667eea 0%, #764ba2 100%)` |
+| Page background | `#f5f7fa` |
+| Chat area background | `#fafbfc` |
+| My message bubble | Purple gradient |
+| Their message bubble | White with shadow |
+
+### Layout
+
+- **Sidebar:** fixed `380px` width
+- **Chat area:** `flex: 1` — fills all remaining horizontal space
+- **Total height:** `calc(100vh - 64px)` (accounts for the top nav bar)
 
 ---
 

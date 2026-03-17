@@ -1,25 +1,38 @@
 # 💬 Chat App
 
-A full-stack real-time chat application supporting private messaging, group chats, image sharing, online status tracking, and message delivery receipts.
+A full-stack real-time chat application supporting private messaging, group chats, image sharing, online status tracking, message delivery receipts, and SSE-based push notifications.
 
 Built with **React** on the frontend and **Node.js + Express + Socket.io** on the backend, with **MySQL** as the database and **Cloudinary** for image storage.
 
+> For in-depth documentation see:
+> - [Backend Docs →](./backend/README.md)
+> - [Frontend Docs →](./frontend/README.md)
+
 ---
 
-## 📸 Features
+## ✅ Features
 
-- ✅ Real-time private messaging (1-to-1)
-- ✅ Real-time group messaging
-- ✅ Image sharing in chat (upload + view)
-- ✅ Full-screen image lightbox with zoom + download
-- ✅ Message delivery status (sending → sent → delivered → read)
-- ✅ Online / offline user status
-- ✅ Typing indicators (backend ready, UI coming soon)
-- ✅ Paginated message history (load older messages on scroll)
-- ✅ Profile photo upload
-- ✅ JWT-based authentication with HTTP-only cookies
-- ✅ Create new private chats
-- ✅ Create group chats with photo + description
+| Feature | Status |
+|---|---|
+| Real-time private messaging (1-to-1) | ✅ Done |
+| Real-time group messaging | ✅ Done |
+| Image sharing in chat (upload + view) | ✅ Done |
+| Full-screen image lightbox with zoom + download | ✅ Done |
+| Message delivery status (sending → sent → delivered → read) | ✅ Done |
+| Online / offline user status | ✅ Done |
+| Paginated message history (load older on scroll) | ✅ Done |
+| Profile photo upload | ✅ Done |
+| JWT-based authentication with HTTP-only cookies | ✅ Done |
+| Create new private chats | ✅ Done |
+| Create group chats with photo + description | ✅ Done |
+| SSE push notifications with offline queue | ✅ Done |
+| Typing indicators (backend ready) | 🔜 UI coming soon |
+| Emoji picker | 🔜 Planned |
+| Delete message | 🔜 Planned |
+| Reply to message | 🔜 Planned |
+| Message reactions | 🔜 Planned |
+| Voice messages | 🔜 Planned |
+| Read receipts per user in groups | 🔜 Planned |
 
 ---
 
@@ -27,29 +40,31 @@ Built with **React** on the frontend and **Node.js + Express + Socket.io** on th
 
 ```
 chat-app/
-├── backend/                  # Node.js + Express + Socket.io server
-│   ├── server.js
-│   ├── config/
-│   ├── Models/
-│   ├── routes/
-│   ├── middleware/
-│   ├── socket/
-│   ├── .env
+├── backend/                         # Node.js + Express + Socket.io server
+│   ├── server.js                    # Entry point
+│   ├── config/                      # DB + Cloudinary config
+│   ├── Models/                      # Sequelize models + associations
+│   ├── Routes/                      # REST API routes
+│   ├── middleware/                  # JWT auth + file upload
+│   ├── socket/                      # Socket.io event handlers
+│   ├── sse/                         # SSE manager + notification service
+│   ├── utils/                       # Background jobs (token cleanup)
+│   ├── .env                         # Backend environment variables
 │   ├── package.json
-│   └── README.md             # Detailed backend documentation
+│   └── README.md                    # → Backend documentation
 │
-├── frontend/                 # React application
+├── frontend/                        # React application
 │   ├── src/
-│   │   ├── pages/
-│   │   ├── components/
-│   │   ├── hooks/
-│   │   ├── context/
-│   │   └── Interceptor/
-│   ├── .env
+│   │   ├── pages/                   # Home.jsx (main chat page)
+│   │   ├── components/              # chat/, sidebar/, dialogs/, common/
+│   │   ├── hooks/                   # useSocket.js
+│   │   ├── context/                 # UserContext.jsx
+│   │   └── Interceptor/             # Axios with JWT header
+│   ├── .env                         # Frontend environment variables
 │   ├── package.json
-│   └── README.md             # Detailed frontend documentation
+│   └── README.md                    # → Frontend documentation
 │
-└── README.md                 # This file
+└── README.md                        # This file
 ```
 
 ---
@@ -58,198 +73,204 @@ chat-app/
 
 ### Frontend
 
-| Technology                 | Purpose                                  |
-| -------------------------- | ---------------------------------------- |
-| React 19                   | UI library                               |
-| Material UI v7             | Component library and styling            |
-| Socket.io Client           | Real-time WebSocket communication        |
-| Axios                      | HTTP requests to backend                 |
-| react-virtuoso             | Virtualized message list for performance |
-| yet-another-react-lightbox | Full-screen image viewer                 |
-| React Router v7            | Client-side routing                      |
+| Technology | Purpose |
+|---|---|
+| React 19 | UI library |
+| Material UI v7 | Component library and styling |
+| Socket.io Client | Real-time WebSocket communication |
+| Axios | HTTP requests to backend |
+| react-virtuoso | Virtualized message list for performance |
+| yet-another-react-lightbox | Full-screen image viewer |
+| React Router v7 | Client-side routing |
+| js-cookie | JWT token reading from cookies |
 
 ### Backend
 
-| Technology           | Purpose                               |
-| -------------------- | ------------------------------------- |
-| Node.js + Express v5 | HTTP server and REST API              |
-| Socket.io            | Real-time bidirectional communication |
-| MySQL + Sequelize    | Relational database and ORM           |
-| Cloudinary           | Cloud image storage                   |
-| Multer               | File upload handling                  |
-| JWT + bcrypt         | Authentication and password security  |
+| Technology | Purpose |
+|---|---|
+| Node.js + Express v5 | HTTP server and REST API |
+| Socket.io | Real-time bidirectional communication |
+| SSE (Server-Sent Events) | Push notifications + offline queue |
+| MySQL + Sequelize | Relational database and ORM |
+| Cloudinary | Cloud image storage |
+| Multer | File upload handling |
+| JWT + bcryptjs | Authentication and password security |
 
 ---
 
 ## 🏗️ Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    FRONTEND (React)                  │
-│                                                      │
-│  Home.jsx (state)                                    │
-│    ├── Sidebar (chat list)                           │
-│    ├── ChatArea (messages)                           │
-│    │     ├── MessageList (virtualized)               │
-│    │     │     └── MessageItem (bubble + lightbox)   │
-│    │     └── MessageInput (text + image)             │
-│    └── Dialogs (new chat, create group)              │
-│                                                      │
-│  useSocket.js (all socket logic in one hook)         │
-└────────────────┬──────────────────┬─────────────────┘
-                 │   WebSocket      │   HTTP (REST)
-                 │   (Socket.io)    │   (Axios)
-┌────────────────▼──────────────────▼─────────────────┐
-│                    BACKEND (Node.js)                  │
-│                                                      │
-│  server.js                                           │
-│    ├── REST Routes                                   │
-│    │     ├── /users/*        (auth, profile, chats)  │
-│    │     ├── /conversations/* (create, group)        │
-│    │     └── /api/messages/* (image upload)          │
-│    │                                                  │
-│    └── Socket.io Handlers                            │
-│          ├── register                                │
-│          ├── send_message                            │
-│          ├── message_delivered / message_read        │
-│          ├── typing_start / typing_stop              │
-│          └── disconnect                              │
-└────────────────┬──────────────────┬─────────────────┘
-                 │                  │
-┌────────────────▼──────┐  ┌───────▼─────────────────┐
-│   MySQL Database       │  │   Cloudinary             │
-│                        │  │                          │
-│   users                │  │   profile-images/        │
-│   conversations        │  │   chat-images/           │
-│   conversation_        │  │     ├── {convId}/        │
-│     participants       │  │     │     └── img.jpg    │
-│   messages             │  │     └── ...              │
-│   active_users         │  │                          │
-└────────────────────────┘  └─────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                     FRONTEND (React)                      │
+│                                                           │
+│  Home.jsx (owns all state)                               │
+│    ├── Sidebar  → ChatList → ChatListItem                 │
+│    ├── ChatArea → MessageList (virtuoso) → MessageItem    │
+│    │              MessageInput (text + image)             │
+│    └── Dialogs  → NewChatDialog, CreateGroupDialog        │
+│                                                           │
+│  useSocket.js  — all Socket.io logic in one hook         │
+│  Interceptor/auth.js  — Axios with JWT Bearer header     │
+└─────────────┬──────────────────┬────────────────┬────────┘
+              │  WebSocket       │  HTTP REST     │  SSE
+              │  (Socket.io)     │  (Axios)       │  (EventSource)
+┌─────────────▼──────────────────▼────────────────▼────────┐
+│                     BACKEND (Node.js)                     │
+│                                                           │
+│  REST Routes                                             │
+│    ├── /users/*            auth, profile, conversations  │
+│    ├── /conversations/*    private + group management    │
+│    ├── /api/messages/*     image upload (Cloudinary)     │
+│    └── /notifications/*    SSE token + stream            │
+│                                                           │
+│  Socket.io Handlers                                      │
+│    register → send_message → message_delivered/read      │
+│    typing_start/stop → disconnect                        │
+│                                                           │
+│  SSE Notification Pipeline                               │
+│    notificationService → sseManager / queued_notifications│
+└──────────┬──────────────────────────────┬────────────────┘
+           │                              │
+┌──────────▼────────────┐    ┌───────────▼────────────────┐
+│    MySQL Database      │    │    Cloudinary              │
+│                        │    │                            │
+│  users                 │    │  profile-images/           │
+│  conversations         │    │  chat-images/              │
+│  conversation_         │    │    └── {conversationId}/   │
+│    participants        │    │          └── image.jpg     │
+│  messages              │    └────────────────────────────┘
+│  active_users          │
+│  queued_notifications  │
+│  sse_tokens            │
+└────────────────────────┘
 ```
 
 ---
 
 ## 🔄 Core Flows
 
-### Text Message Flow
+### Text Message
 
 ```
-User types message → hits Enter or Send
+User types + sends
         ↓
-Optimistic message added to UI immediately (status: sending)
+Optimistic message in UI immediately (status: sending)
         ↓
-Socket emits send_message { senderUserId, conversationId, message, message_type: "text" }
+socket.emit("send_message") → backend validates → saves to DB
         ↓
-Backend validates → saves to DB → emits message_sent to sender
+Backend emits "message_sent" → sender (status: sent)
+Backend emits "receive_message" → all online participants
         ↓
-Backend finds all online participants → emits receive_message to each
+If ≥1 receiver online → status auto-upgrades to "delivered"
         ↓
-Sender UI: optimistic message updated with real ID (status: sent → delivered)
+Receiver opens conversation → "message_read" emitted → status: read
         ↓
-Receiver UI: new message appears in real time
+Sender sees: ⏱ → ✓ → ✓✓ (grey) → ✓✓ (blue)
 ```
 
-### Image Message Flow
+### Image Message
 
 ```
-User picks image → preview shown in input area
+User picks image → preview shown in MessageInput
         ↓
-User clicks Send
-        ↓
-Optimistic message added to UI with local preview URL (status: sending)
+Optimistic message in UI with local blob preview (status: sending)
         ↓
 HTTP POST /api/messages/upload-image/:conversationId
+  → Multer + Cloudinary → stores under chat-images/{conversationId}/
+  → returns { image_url }
         ↓
-Multer → Cloudinary → stored under chat-images/{conversationId}/
+socket.emit("send_message") with { message_type: "image", image_url }
         ↓
-Backend returns { image_url } (permanent Cloudinary URL)
+Backend saves → emits to all participants
         ↓
-Socket emits send_message { message_type: "image", image_url }
-        ↓
-Backend saves to DB → emits to all participants
-        ↓
-Sender: optimistic message replaced with real Cloudinary URL
-        ↓
+Sender: local preview replaced with Cloudinary URL silently
 Receiver: image renders in real time via Cloudinary CDN
 ```
 
-### Authentication Flow
+### Authentication
 
 ```
 User submits login form
         ↓
-POST /users/login → backend verifies password (bcrypt)
+POST /users/login → bcryptjs verifies password
         ↓
-JWT token generated → stored in HTTP-only cookie
+JWT issued (24h) → stored in HTTP-only cookie
         ↓
 React UserContext reads user from cookie on app load
         ↓
-Axios interceptor attaches token to every API request
+Axios interceptor attaches "Authorization: Bearer <token>" to every request
         ↓
-Socket connects → emits register with userId
+Socket connects → emits "register" with userId
         ↓
 Backend marks user online in active_users table
+        ↓
+Previously undelivered messages upgraded to "delivered" + senders notified
 ```
 
-### Message Status Flow
+### SSE Notifications
 
 ```
-Message created → status: "sent"
+Client: POST /notifications/token → receive one-time token (30s TTL)
         ↓
-Receiver's socket receives message → emits message_delivered
+Client: GET /notifications/stream?token=...
         ↓
-Backend updates status: "delivered" → notifies sender
+Backend: validates + consumes token → registers SSE connection
         ↓
-Receiver opens the conversation → markMessageAsRead() called
+Flush any queued_notifications from DB in order
         ↓
-Backend updates status: "read" → notifies sender
-        ↓
-Sender sees: ✓ → ✓✓ (grey) → ✓✓ (blue)
+New messages: push live to SSE stream if connected
+             OR insert into queued_notifications if offline
 ```
 
 ---
 
 ## 🗄️ Database Schema (Summary)
 
-```
-users
-  id, name, password, profile_photo, phone_number
+| Table | Key Columns |
+|---|---|
+| `users` | `id`, `name`, `password` (hashed), `profile_photo`, `phone_number` (unique login) |
+| `conversations` | `id`, `type` (private/group), `name`, `group_photo`, `created_by`, `description` |
+| `conversation_participants` | `conversation_id`, `user_id`, `role` (admin/member), `joined_at` |
+| `messages` | `id`, `sender_id`, `conversation_id`, `message_type` (text/image), `message`, `image_url`, `status` |
+| `active_users` | `user_id` (unique), `status` (online/offline), `last_seen`, `socket_id` |
+| `queued_notifications` | SSE notifications queued for offline users |
+| `sse_tokens` | One-time tokens (30s TTL) for authenticating the SSE stream |
 
-conversations
-  id, type (private/group), name, group_photo, created_by, description
-
-conversation_participants
-  id, conversation_id → conversations, user_id → users, role (admin/member), joined_at
-
-messages
-  id, sender_id → users, conversation_id → conversations,
-  message_type (text/image), message (nullable), image_url (nullable),
-  status (sending/sent/delivered/read)
-
-active_users
-  user_id → users (unique), status (online/offline), last_seen, socket_id
-```
+> Full column details, types, and associations: [Backend Docs → Database Structure](./backend/README.md)
 
 ---
 
 ## ⚙️ Environment Variables
 
-### Backend `.env`
+### Backend — `backend/.env`
 
 ```env
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=yourpassword
-DB_NAME=chatapp
+# Server
+PORT=5000
+NODE_ENV=development
+
+# CORS
+FRONT_END_URL=http://localhost:3000
+FRONT_END_URL_NETWORK=http://192.168.x.x:3000
+
+# MySQL
+DATABASE_HOST=localhost
+DATABASE_USERNAME=root
+DATABASE_PASS=your_password
+DATABASE_NAME=chat_app
+
+# Auth
 JWT_SECRET=your_jwt_secret
+DB_PASSWORD_SALTROUNDS=10
+
+# Cloudinary
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
-PORT=5000
 ```
 
-### Frontend `.env`
+### Frontend — `frontend/.env`
 
 ```env
 REACT_APP_API_URL=http://localhost:5000
@@ -259,6 +280,12 @@ REACT_APP_API_URL=http://localhost:5000
 
 ## 🚀 Getting Started
 
+### Prerequisites
+
+- Node.js ≥ 18
+- MySQL server running locally
+- Cloudinary account (free tier is fine)
+
 ### 1. Clone the repo
 
 ```bash
@@ -266,53 +293,54 @@ git clone https://github.com/yourusername/chat-app.git
 cd chat-app
 ```
 
-### 2. Setup Backend
+### 2. Set up the backend
 
 ```bash
 cd backend
 npm install
-# create .env file with your credentials (see above)
-npm start
+cp .env.example .env   # fill in your credentials
+npm start              # runs on http://localhost:5000
 ```
 
-### 3. Setup Frontend
+### 3. Set up the frontend
 
 ```bash
 cd frontend
 npm install
-# create .env file with your credentials (see above)
-npm start
+cp .env.example .env   # set REACT_APP_API_URL
+npm start              # runs on http://localhost:3000
 ```
 
 ### 4. Open the app
 
-```
-Frontend: http://localhost:3000
-Backend:  http://localhost:5000
-```
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:5000 |
+
+The backend will auto-sync the database schema on first start (`sync({ alter: true })`).
 
 ---
 
 ## 📚 Detailed Documentation
 
-For in-depth documentation of each side:
-
-- 👉 [Backend README](./backend/README.md) — DB schema, socket events, API endpoints, middleware, auth flow
-- 👉 [Frontend README](./frontend/README.md) — Component tree, state management, data flow, hooks, virtualization, lightbox
+| Document | Covers |
+|---|---|
+| [Backend README](./backend/README.md) | API reference, socket events, SSE pipeline, DB schema, auth, upload system |
+| [Frontend README](./frontend/README.md) | Component tree, state management, data flow, useSocket hook, virtualization, lightbox, pagination |
 
 ---
 
 ## 🔮 Planned Features
 
-| Feature                          | Status         |
-| -------------------------------- | -------------- |
-| Typing indicator UI              | 🔜 Coming soon |
-| Emoji picker                     | 🔜 Coming soon |
-| Delete message                   | 🔜 Coming soon |
-| Reply to message                 | 🔜 Coming soon |
-| Copy message text                | 🔜 Coming soon |
-| Group photo upload               | 🔜 Coming soon |
-| Push notifications               | 📋 Planned     |
-| Message reactions                | 📋 Planned     |
-| Voice messages                   | 📋 Planned     |
-| Read receipts per user in groups | 📋 Planned     |
+| Feature | Status |
+|---|---|
+| Typing indicator UI | 🔜 Coming soon |
+| Emoji picker | 🔜 Coming soon |
+| Delete message | 🔜 Coming soon |
+| Reply to message | 🔜 Coming soon |
+| Copy message text | 🔜 Coming soon |
+| Push notifications (mobile) | 📋 Planned |
+| Message reactions | 📋 Planned |
+| Voice messages | 📋 Planned |
+| Read receipts per user in groups | 📋 Planned |
