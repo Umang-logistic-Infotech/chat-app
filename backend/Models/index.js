@@ -5,6 +5,9 @@ import Messages from "./Messages.js";
 import ActiveUsers from "./ActiveUsers.js";
 import QueuedNotification from "./QueuedNotification.js";
 import SSEToken from "./SSEToken.js";
+import Calls from "./Calls.js";
+import CallEvents from "./CallEvents.js";
+import CallParticipants from "./CallParticipants.js";
 
 // Conversations <-> ConversationParticipants
 Conversations.hasMany(ConversationParticipants, {
@@ -81,6 +84,23 @@ Users.hasMany(SSEToken, {
 SSEToken.belongsTo(Users, {
   foreignKey: "user_id",
 });
+
+Calls.belongsTo(Users, { foreignKey: "caller_id", as: "caller" });
+Calls.belongsTo(Users, { foreignKey: "receiver_id", as: "receiver" });
+
+Users.hasMany(Calls, { foreignKey: "caller_id", as: "outgoing_calls" });
+Users.hasMany(Calls, { foreignKey: "receiver_id", as: "incoming_calls" });
+
+
+CallEvents.belongsTo(Calls, { foreignKey: "call_id" });
+Calls.hasMany(CallEvents, { foreignKey: "call_id" });
+
+CallParticipants.belongsTo(Calls, { foreignKey: "call_id" });
+CallParticipants.belongsTo(Users, { foreignKey: "user_id" });
+
+Calls.hasMany(CallParticipants, { foreignKey: "call_id" });
+Users.hasMany(CallParticipants, { foreignKey: "user_id" });
+
 export {
   Users,
   Conversations,
@@ -89,4 +109,7 @@ export {
   ActiveUsers,
   QueuedNotification,
   SSEToken,
+  Calls,
+  CallEvents,
+  CallParticipants,
 };

@@ -7,11 +7,14 @@ import {
 } from "../Models/index.js";
 import { Op } from "sequelize";
 import { sendNotification,buildNotificationPayload } from "../sse/notificationService.js";
+import { registerCallHandlers } from "./callHandlers.js";
 
 
 
 export default function setupSocketHandlers(io) {
   io.on("connection", (socket) => {
+    registerCallHandlers(io, socket);
+
     socket.on("register", async (userId) => {
       try {
         // ── Step 1: Mark user online (unchanged) ────────────────────────────

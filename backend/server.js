@@ -14,7 +14,7 @@ import GroupRoutes from "./Routes/GroupRoutes.js";
 import MessageRoutes from "./Routes/MessageRoutes.js";
 import notificationRouter from "./Routes/NotificationRoutes.js";
 import startSSETokenCleanup from "./utils/cleanupSSETokens.js";
-
+import callRoutes from "./Routes/callRoutes.js";
 const app = express();
 const httpServer = http.createServer(app);
 
@@ -47,6 +47,7 @@ app.use("/notifications", notificationRouter); // ✅ now JWT protected
 app.use("/conversations", ConversationRoutes);
 app.use("/api", MessageRoutes);
 app.use("/conversations/group", GroupRoutes);
+app.use("/calls", callRoutes);
 
 app.get("/", (req, res) => res.send("Hello World!"));
 
